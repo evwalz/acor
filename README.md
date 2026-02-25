@@ -1,11 +1,11 @@
 # acor
 
-R package for **Asymmetric Correlation** measures: AKC, AGC, CID, and CMA.
+R package for **Asymmetric Correlation Measures**: AKC, AGC, CID, and CMA.
 
 ## Installation
 
 ```r
-devtools::install_github("your-repo/acor")
+devtools::install_github("evwalz/acor")
 ```
 
 ## Usage
