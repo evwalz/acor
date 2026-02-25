@@ -374,7 +374,7 @@ run_benchmarks <- function(reps = 5) {
     X <- sc$gen_X(sc$n)
     Y <- sc$gen_Y(sc$n)
     
-    selected <- select_kernel_version(Y, X)
+    selected <- acor:::select_kernel_version(Y, X)
     
     t_orig <- time_med(function() run_uni(X, Y, "original"), reps)
     t_v1   <- time_med(function() run_uni(X, Y, "v1"),       reps)
@@ -433,7 +433,7 @@ run_benchmarks <- function(reps = 5) {
     X <- sc$gen_X(sc$n, sc$m)
     Y <- sc$gen_Y(sc$n)
     
-    selected <- select_kernel_version(Y, X)
+    selected <- acor:::select_kernel_version(Y, X)
     
     t_orig <- time_med(function() run_mv(X, Y, "original"), reps)
     t_v1   <- time_med(function() run_mv(X, Y, "v1"),       reps)
@@ -454,7 +454,7 @@ run_benchmarks <- function(reps = 5) {
 }
 
 # Run benchmarks when script is sourced directly (not during testthat)
-if (!interactive() || identical(Sys.getenv("RUN_BENCHMARKS"), "1")) {
+if (interactive() && identical(Sys.getenv("RUN_BENCHMARKS"), "1")) {
   run_benchmarks()
 }
 
@@ -591,7 +591,7 @@ run_acor_benchmarks <- function(reps = 5) {
     }
     
     # AKC version that will be selected
-    akc_ver <- select_kernel_version(Y, X)
+    akc_ver <- acor:::select_kernel_version(Y, X)
     
     # Time acor.test
     t_akc <- time_med(function() acor.test(X, Y, method = "akc"), reps)
@@ -628,6 +628,6 @@ run_acor_benchmarks <- function(reps = 5) {
 }
 
 # Run both benchmark sets when script is sourced directly
-if (!interactive() || identical(Sys.getenv("RUN_BENCHMARKS"), "1")) {
+if (interactive() && identical(Sys.getenv("RUN_BENCHMARKS"), "1")) {
   run_acor_benchmarks()
 }

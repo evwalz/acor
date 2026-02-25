@@ -1,0 +1,27 @@
+{
+    "id": "6E4DB01A",
+    "path": "~/Documents/Work/after_promotion/CPA_extension/code/project_R/tests/testthat/test_akc_fast.R",
+    "project_path": "tests/testthat/test_akc_fast.R",
+    "type": "r_source",
+    "hash": "3851699987",
+    "contents": "",
+    "dirty": false,
+    "created": 1772026738216.0,
+    "source_on_save": false,
+    "relative_order": 21,
+    "properties": {
+        "tempName": "Untitled1",
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "1324,4",
+        "scrollLine": "536"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1772027598,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1772027598918,
+    "read_only": false,
+    "read_only_alternatives": []
+}

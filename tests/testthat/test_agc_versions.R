@@ -28,15 +28,15 @@ TOL <- 1e-10
 run_agc_uni <- function(y_rank, x_rank, version, IID = TRUE) {
   if (IID) {
     if (version == "original") {
-      Sigma_agc(y_rank, x_rank)
+      acor:::Sigma_agc(y_rank, x_rank)
     } else {  # v2
-      Sigma_agc_v2(y_rank, x_rank)
+      acor:::Sigma_agc_v2(y_rank, x_rank)
     }
   } else {
     if (version == "original") {
-      Sigma_agc_ts(y_rank, x_rank)
+      acor:::Sigma_agc_ts(y_rank, x_rank)
     } else {  # v2
-      Sigma_agc_ts_v2(y_rank, x_rank)
+      acor:::Sigma_agc_ts_v2(y_rank, x_rank)
     }
   }
 }
@@ -45,15 +45,15 @@ run_agc_uni <- function(y_rank, x_rank, version, IID = TRUE) {
 run_agc_mv <- function(y_rank, xarray_ranks, version, IID = TRUE) {
   if (IID) {
     if (version == "original") {
-      Sigma_agc_multivariate(y_rank, xarray_ranks)
+      acor:::Sigma_agc_multivariate(y_rank, xarray_ranks)
     } else {  # v2
-      Sigma_agc_multivariate_v2(y_rank, xarray_ranks)
+      acor:::Sigma_agc_multivariate_v2(y_rank, xarray_ranks)
     }
   } else {
     if (version == "original") {
-      Sigma_agc_multivariate_ts(y_rank, xarray_ranks)
+      acor:::Sigma_agc_multivariate_ts(y_rank, xarray_ranks)
     } else {  # v2
-      Sigma_agc_multivariate_ts_v2(y_rank, xarray_ranks)
+      acor:::Sigma_agc_multivariate_ts_v2(y_rank, xarray_ranks)
     }
   }
 }
@@ -520,7 +520,7 @@ run_agc_benchmarks <- function(reps = 5) {
 }
 
 # Run benchmarks when script is sourced directly (not during testthat)
-if (!interactive() || identical(Sys.getenv("RUN_BENCHMARKS"), "1")) {
+if (interactive() && identical(Sys.getenv("RUN_BENCHMARKS"), "1")) {
   run_agc_benchmarks()
 }
 
@@ -752,4 +752,4 @@ if (!interactive() || identical(Sys.getenv("RUN_BENCHMARKS"), "1")) {
 #   expect_equal(r_v2$Sigma_ind, r_orig$Sigma_ind, tolerance = 1e-10)
 # })
 # 
-# 
+#
