@@ -1,0 +1,27 @@
+{
+    "id": "32175D11",
+    "path": "~/Documents/Work/after_promotion/CPA_extension/code/project_R/tests/testthat/test_akc_versions.R",
+    "project_path": "tests/testthat/test_akc_versions.R",
+    "type": "r_source",
+    "hash": "0",
+    "contents": "",
+    "dirty": true,
+    "created": 1771997304090.0,
+    "source_on_save": false,
+    "relative_order": 15,
+    "properties": {
+        "tempName": "Untitled1",
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "30,9",
+        "scrollLine": "8"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1771997449,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1772026160674,
+    "read_only": false,
+    "read_only_alternatives": []
+}

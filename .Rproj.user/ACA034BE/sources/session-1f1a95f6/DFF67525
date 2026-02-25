@@ -1,0 +1,26 @@
+{
+    "id": "DFF67525",
+    "path": "~/Documents/Work/after_promotion/CPA_extension/code/project_R/tests/testthat/test-acor0.R",
+    "project_path": "tests/testthat/test-acor0.R",
+    "type": "r_source",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1772026110314.0,
+    "source_on_save": false,
+    "relative_order": 20,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "5,13",
+        "scrollLine": "0"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1771996428,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1771996428,
+    "read_only": false,
+    "read_only_alternatives": []
+}

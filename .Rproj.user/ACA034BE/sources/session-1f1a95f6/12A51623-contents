@@ -1,0 +1,137 @@
+# ============================================================================
+# Find exact normalization: net_i -> K_tau_i
+# ============================================================================
+# The differences with net/(n-1) are small but consistent and grow with ties,
+# suggesting a normalization issue rather than a formula error.
+# We try all plausible normalizations systematically.
+# ============================================================================
+
+library(survival)
+library(projectR)
+
+check_normalizations <- function(X, Y, label) {
+  n     <- length(X)
+  conc  <- concordance(Y ~ X, influence = 2)
+  inf   <- conc$influence
+  net   <- inf[, "concordant"] - inf[, "discordant"]
+  
+  if (is_binary(Y)) {
+    tau_Y_res <- tau_Y_func_binary(Y)
+    akc_res   <- kendall_tau_sign_binary(X, Y)
+  } else {
+    tau_Y_res <- tau_Y_func(Y)
+    akc_res   <- kendall_tau_sign(X, Y)
+  }
+  tau_XY    <- akc_res$expectation
+  K_tau_ref <- K_tau_vec_v1(X, Y, tau_XY)
+  
+  n_pairs      <- n * (n - 1) / 2
+  n_comparable <- conc$count["concordant"] + conc$count["discordant"]
+  
+  candidates <- list(
+    "net / n"                    = net / n,
+    "net / (n-1)"                = net / (n - 1),
+    "net * 2 / n"                = net * 2 / n,
+    "net * 2 / (n-1)"            = net * 2 / (n - 1),
+    "net / n_comparable * n"     = net / n_comparable * n,
+    "net / n_comparable * (n-1)" = net / n_comparable * (n - 1)
+  )
+  
+  cat(sprintf("\n%s  (n=%d, n_comparable=%g / %g pairs)\n",
+              label, n, n_comparable, n_pairs))
+  for (nm in names(candidates)) {
+    err  <- max(abs(candidates[[nm]] - K_tau_ref))
+    flag <- if (err < 1e-8) "  <-- EXACT" else if (err < 1e-3) "  <-- close" else ""
+    cat(sprintf("  Max|%-36s - K_tau|: %.2e%s\n", nm, err, flag))
+  }
+  
+  # Best-fit scalar
+  k_ls   <- sum(net * K_tau_ref) / sum(net^2)
+  err_ls <- max(abs(k_ls * net - K_tau_ref))
+  cat(sprintf("  Best LS scalar: k=%.8f  (1/(n-1)=%.8f)  Max err: %.2e\n",
+              k_ls, 1/(n-1), err_ls))
+}
+
+set.seed(101)
+check_normalizations(rnorm(200), rnorm(200),
+                     "continuous X & Y")
+check_normalizations(sample(1:10, 200, TRUE), rnorm(200),
+                     "discrete X (10 lv), continuous Y")
+check_normalizations(sample(1:10, 200, TRUE), sample(1:5, 200, TRUE),
+                     "discrete X+Y (10x5)")
+check_normalizations(rnorm(200), rbinom(200, 1, 0.5),
+                     "binary Y")
+check_normalizations(sample(1:2, 200, TRUE), rbinom(200, 1, 0.5),
+                     "binary X & Y (extreme ties)")
+
+
+# ============================================================================
+# Check: does adding back tied pair contributions fix the gap?
+# concordance() puts tied pairs into tied.x / tied.y / tied.xy columns.
+# K_tau includes these with 0.5 weights via H_bar. So the net count is missing
+# the directed contribution of tied pairs. We reconstruct those manually.
+# ============================================================================
+
+cat("\n\n============================================================\n")
+cat("Check: does adding back tied pair contributions fix the gap?\n")
+cat("============================================================\n\n")
+
+check_with_ties <- function(X, Y, label) {
+  n    <- length(X)
+  conc <- concordance(Y ~ X, influence = 2)
+  inf  <- conc$influence
+  
+  if (is_binary(Y)) {
+    tau_Y_res <- tau_Y_func_binary(Y)
+    akc_res   <- kendall_tau_sign_binary(X, Y)
+  } else {
+    tau_Y_res <- tau_Y_func(Y)
+    akc_res   <- kendall_tau_sign(X, Y)
+  }
+  tau_XY    <- akc_res$expectation
+  K_tau_ref <- K_tau_vec_v1(X, Y, tau_XY)
+  
+  # Net from concordant/discordant only (ignores tied pairs)
+  net <- inf[, "concordant"] - inf[, "discordant"]
+  
+  # Tied-X pairs: same X_i = X_j, different Y.
+  # H_bar gives weight 0.5 to these. Their directed contribution to K_tau for obs i:
+  #   +0.5 for each j with X_j = X_i & Y_j < Y_i  (j is below i)
+  #   -0.5 for each j with X_j = X_i & Y_j > Y_i  (j is above i)
+  # Similarly for tied-Y pairs.
+  net_tied_x <- numeric(n)
+  net_tied_y <- numeric(n)
+  for (i in seq_len(n)) {
+    same_x <- X[-i] == X[i]
+    if (any(same_x)) {
+      net_tied_x[i] <- 0.5 * sum(Y[-i][same_x] < Y[i]) -
+        0.5 * sum(Y[-i][same_x] > Y[i])
+    }
+    same_y <- Y[-i] == Y[i]
+    if (any(same_y)) {
+      net_tied_y[i] <- 0.5 * sum(X[-i][same_y] < X[i]) -
+        0.5 * sum(X[-i][same_y] > X[i])
+    }
+  }
+  
+  net_extended <- (net + net_tied_x + net_tied_y) / (n - 1)
+  
+  cat(sprintf("  %s\n", label))
+  cat(sprintf("    Max|net/(n-1) - K_tau|:                  %.2e\n",
+              max(abs(net / (n - 1) - K_tau_ref))))
+  cat(sprintf("    Max|(net + tied_x + tied_y)/(n-1) - K_tau|: %.2e\n",
+              max(abs(net_extended - K_tau_ref))))
+  cat("\n")
+}
+
+set.seed(201)
+check_with_ties(rnorm(200), rnorm(200),
+                "continuous X & Y")
+check_with_ties(sample(1:10, 200, TRUE), rnorm(200),
+                "discrete X (10 lv)")
+check_with_ties(sample(1:10, 200, TRUE), sample(1:5, 200, TRUE),
+                "discrete X+Y (10x5)")
+check_with_ties(rnorm(200), rbinom(200, 1, 0.5),
+                "binary Y")
+check_with_ties(sample(1:2, 200, TRUE), rbinom(200, 1, 0.5),
+                "binary X & Y (extreme ties)")

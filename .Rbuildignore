@@ -1,0 +1,11 @@
+^\\.Rproj\\.user$
+^\\.Rhistory$
+^\\.RData$
+^\\.Ruserdata$
+^README\\.Rmd$
+^LICENSE\\.md$
+
+^.*\.Rproj$
+^\.Rproj\.user$
+^doc$
+^Meta$

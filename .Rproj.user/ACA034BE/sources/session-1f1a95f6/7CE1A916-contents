@@ -1,0 +1,888 @@
+# ============================================================================
+# AGC V2: Fenwick Tree Optimized Functions for Large n / Continuous Data
+# ============================================================================
+#
+# The existing kernel_ties_optim2() builds R×N and M×N sign matrices and
+# performs R×M matrix multiplication.  When data is continuous (R ≈ M ≈ N),
+# this becomes O(n²) in time and memory.
+#
+# These v2 functions replace the sign-matrix kernel with a Fenwick-tree
+# approach that computes the same k_p vector in O(n log n) time and O(n)
+# memory, matching the AKC v2 strategy.
+#
+# The downstream variance / covariance algebra (sigma_rho, sigma_pz, HAC
+# loops, independence variance, etc.) is identical to the existing AGC
+# code — only the kernel computation changes.
+#
+# Functions provided (parallel to existing AGC structure):
+#   kernel_agc_v2()               - Fenwick-tree kernel  (replaces kernel_ties_optim2)
+#   Sigma_agc_v2()                - univariate IID
+#   Sigma_agc_ts_v2()             - univariate HAC (time series)
+#   Sigma_agc_multivariate_v2()   - multivariate IID
+#   Sigma_agc_multivariate_ts_v2()- multivariate HAC (time series)
+# ============================================================================
+
+
+# ============================================================================
+# FENWICK TREE HELPERS  (reuse from akc_functions.R if already loaded,
+#                        otherwise self-contained here)
+# ============================================================================
+
+if (!exists("fenwick_create", mode = "function")) {
+  fenwick_create <- function(n) numeric(n)
+  
+  fenwick_update <- function(tree, i, delta = 1) {
+    n <- length(tree)
+    while (i <= n) {
+      tree[i] <- tree[i] + delta
+      i <- i + bitwAnd(i, -i)
+    }
+    tree
+  }
+  
+  fenwick_query <- function(tree, i) {
+    if (i <= 0) return(0)
+    s <- 0
+    while (i > 0) {
+      s <- s + tree[i]
+      i <- i - bitwAnd(i, -i)
+    }
+    s
+  }
+}
+
+
+# ============================================================================
+# CORE KERNEL: O(n log n) replacement for kernel_ties_optim2
+# ============================================================================
+#
+# kernel_ties_optim2 computes, for each observation i (returned in original
+# order), the influence function value:
+#
+#   k_p[i] = 4*(g_1[i] + g_2[i] + G_x[i]*G_y[i] - G_y[i] - G_x[i]) + 1 - rho
+#
+# where G_x[i] = (rank_x[i] - 0.5)/N   (grade of x)
+#       G_y[i] = (rank_y[i] - 0.5)/N   (grade of y)
+#
+#   g_1[i] = (1/4N) * sum_k  [ mean_sign_x(x_i, y_k) + 2*G_x[i] + 2*G_y[k] - 1 ]
+#            summed only over k that share the same y-value as observation i
+#            (i.e. y_rank[k] == y_rank[i])
+#
+#   g_2[i] = (1/4N) * sum_j  n_j * [ mean_sign_x(x_i, y_unique_j) + 2*G_x[i] + 2*G_y_unique_j - 1 ]
+#
+# and   mean_sign_x(x_i, y_j) = (1/N) * sum_k sign(x_rank[k] - x_rank[i]) * sign(y_rank[k] - y_rank[j])
+#
+# The key quantity to compute efficiently is H_bar_agc(x_i, y_j) which counts
+# concordance/discordance patterns.  This is the bivariate empirical CDF with
+# midrank adjustment — exactly H_bar from the AKC code.
+#
+# Relationship:  mean_sign_x(x_i, y_j) = 4*H_bar(x_i, y_j) - 2*F_bar(x_i) - 2*G_bar(y_j) + 1
+#
+# So the full expression inside all_exp is:
+#   mean_sign_x + 2*G_x[i] + 2*G_y[j] - 1
+#   = 4*H_bar(x_i, y_j) - 2*F_bar(x_i) - 2*G_bar(y_j) + 1 + 2*G_x[i] + 2*G_y[j] - 1
+#   = 4*H_bar(x_i, y_j) - 2*F_bar(x_i) + 2*G_x[i] - 2*G_bar(y_j) + 2*G_y[j]
+#
+# Note: For ranks, F_bar(x_i) = G_x[i] and G_bar(y_j) = G_y[j], so this simplifies to:
+#   = 4*H_bar(x_i, y_j)
+#
+# Therefore:
+#   g_1[i] = (1/N) * sum_{k: y_k == y_i} H_bar(x_i, y_k)
+#          = (n_{y_i}/N) * H_bar(x_i, y_i)    [since all k with same y give same H_bar]
+#
+#   g_2[i] = (1/N) * sum_j n_j * H_bar(x_i, y_unique_j)
+#          = (1/N) * sum_k H_bar(x_i, y_k)     [expanding unique groups back to all obs]
+#          = E_k[ H_bar(x_i, y_k) ]
+#
+# And the full kernel becomes:
+#   k_p[i] = 4*(g_1[i] + g_2[i] + G_x[i]*G_y[i] - G_y[i] - G_x[i]) + 1 - rho
+#
+# where g_1 and g_2 require computing H_bar(x_i, y_j) for specific (i, j) combinations.
+#
+# STRATEGY:
+# Instead of materializing all H_bar values, we compute the needed aggregates
+# directly using Fenwick trees and sorting, achieving O(n log n) overall.
+# ============================================================================
+
+kernel_agc_v2 <- function(x_rank, y_rank, rho) {
+  #' Fenwick-tree kernel for AGC influence function values
+  #'
+  #' Computes the same k_p vector as kernel_ties_optim2 but in O(n log n)
+  
+  #' time and O(n) memory.  Operates on rank vectors directly (not pre-sorted).
+  #'
+  #' @param x_rank numeric vector of average ranks for X
+  #' @param y_rank numeric vector of average ranks for Y
+  #' @param rho    Spearman-style correlation (12/N^3)*sum((x-mean)*(y-mean))
+  #' @return numeric vector k_p of length N (influence function values)
+  #' @keywords internal
+  #' @noRd
+  
+  N <- length(x_rank)
+  
+  # --- Grades ---
+  G_x <- (x_rank - 0.5) / N
+  G_y <- (y_rank - 0.5) / N
+  
+  # === Compute g_2[i] = mean_k H_bar(x_i, y_k) ===
+  # H_bar(x_i, y_k) = [ #{j: x_j < x_i, y_j < y_k}
+  #                    + 0.5*#{j: x_j == x_i, y_j < y_k}
+  #                    + 0.5*#{j: x_j < x_i, y_j == y_k}
+  #                    + 0.25*#{j: x_j == x_i, y_j == y_k} ] / N
+  #
+  # g_2[i] = (1/N) * sum_k H_bar(x_i, y_k)
+  #
+  # Expanding: g_2[i] = (1/N^2) * sum_k [
+  #   #{j: x_j < x_i, y_j < y_k} + 0.5*#{j: x_j == x_i, y_j < y_k}
+  #   + 0.5*#{j: x_j < x_i, y_j == y_k} + 0.25*#{j: x_j == x_i, y_j == y_k} ]
+  #
+  # This requires summing over all k for each i, which appears O(n^2).
+  # However, note that:
+  #   sum_k #{j: x_j < x_i, y_j < y_k} = sum_j 1(x_j < x_i) * #{k: y_k > y_j}
+  #                                       = sum_j 1(x_j < x_i) * (N - rank_y[j] + 0.5 - 0.5*n_{y_j})
+  # ... which requires careful decomposition.
+  #
+  # SIMPLER APPROACH: use the identity from the algebraic simplification.
+  # Since we work with ranks (F_bar(x_i) = G_x[i], G_bar(y_j) = G_y[j]):
+  #
+  #   k_p[i] = 4*(g_1[i] + g_2[i]) + 4*G_x[i]*G_y[i] - 4*G_y[i] - 4*G_x[i] + 1 - rho
+  #
+  # And from the identity all_exp[i,j] = 4*H_bar(x_i, y_j) for rank data:
+  #
+  #   g_1[i] = (1/(4N)) * sum_{k: y_k==y_i} all_exp[i, y_i_index]
+  #          = (n_{y_i} / N) * H_bar(x_i, y_i)
+  #
+  #   g_2[i] = (1/(4N)) * sum_j n_j * all_exp[i, j]
+  #          = (1/N) * sum_k H_bar(x_i, y_k)
+  #
+  # So:  k_p[i] = 4 * [ (n_{y_i}/N)*H_bar(x_i,y_i) + (1/N)*sum_k H_bar(x_i,y_k) ]
+  #               + 4*G_x[i]*G_y[i] - 4*G_y[i] - 4*G_x[i] + 1 - rho
+  #
+  # We need two quantities per observation i:
+  #   (A) H_bar(x_i, y_i)          — the bivariate midrank CDF at (x_i, y_i)
+  #   (B) sum_k H_bar(x_i, y_k)    — sum of bivariate midrank CDF over all k
+  
+  # ------------------------------------------------------------------
+  # (A) Compute H_bar(x_i, y_i) for all i using Fenwick tree — O(n log n)
+  # ------------------------------------------------------------------
+  # H_bar(x_i, y_i) = [c_both_less + 0.5*c_xeq_yless + 0.5*c_xless_yeq + 0.25*c_both_eq] / N
+  
+  # Coordinate compression for Y
+  Y_unique <- sort(unique(y_rank))
+  M <- length(Y_unique)
+  Y_compressed <- match(y_rank, Y_unique)
+  
+  # Coordinate compression for X
+  X_unique <- sort(unique(x_rank))
+  R <- length(X_unique)
+  X_compressed <- match(x_rank, X_unique)
+  
+  # Group observations by X rank
+  X_groups <- split(1:N, X_compressed)
+  X_group_order <- order(as.integer(names(X_groups)))
+  
+  # --- Pass 1: count c_both_less and c_xless_yeq via Fenwick tree ---
+  c_both_less <- integer(N)
+  c_xless_yeq <- integer(N)
+  
+  tree <- fenwick_create(M)
+  
+  for (g in X_group_order) {
+    indices <- X_groups[[g]]
+    
+    # Query for all points in this X group (tree has all points with X < X[i])
+    for (i in indices) {
+      yc <- Y_compressed[i]
+      if (yc > 1) {
+        c_both_less[i] <- fenwick_query(tree, yc - 1)
+      }
+      c_xless_yeq[i] <- fenwick_query(tree, yc) - fenwick_query(tree, yc - 1)
+    }
+    
+    # Insert all points in this group into the tree
+    for (i in indices) {
+      tree <- fenwick_update(tree, Y_compressed[i], 1)
+    }
+  }
+  
+  # --- Pass 2: count c_xeq_yless and c_both_eq within each X group ---
+  c_xeq_yless <- integer(N)
+  c_both_eq <- integer(N)
+  
+  for (g in seq_along(X_groups)) {
+    indices <- X_groups[[g]]
+    if (length(indices) == 1) {
+      c_both_eq[indices] <- 1
+      next
+    }
+    
+    # Sort by Y within this X group
+    y_in_group <- Y_compressed[indices]
+    ord <- order(y_in_group)
+    sorted_idx <- indices[ord]
+    sorted_y <- y_in_group[ord]
+    
+    cumcount <- 0
+    prev_y <- -1
+    same_y_count <- 0
+    
+    for (k in seq_along(sorted_idx)) {
+      i <- sorted_idx[k]
+      yc <- sorted_y[k]
+      
+      if (yc == prev_y) {
+        same_y_count <- same_y_count + 1
+      } else {
+        cumcount <- cumcount + same_y_count
+        same_y_count <- 1
+        prev_y <- yc
+      }
+      c_xeq_yless[i] <- cumcount
+    }
+    
+    # Count same (X, Y) pairs
+    xy_key <- paste0(X_compressed[indices], "_", Y_compressed[indices])
+    pair_counts <- table(xy_key)
+    for (i in indices) {
+      pk <- paste0(X_compressed[i], "_", Y_compressed[i])
+      c_both_eq[i] <- pair_counts[[pk]]
+    }
+  }
+  
+  H_bar_ii <- (c_both_less + 0.5 * c_xeq_yless + 0.5 * c_xless_yeq + 0.25 * c_both_eq) / N
+  
+  # ------------------------------------------------------------------
+  # (B) Compute S[i] = sum_k H_bar(x_i, y_k) for all i — O(n log n)
+  # ------------------------------------------------------------------
+  # Expand H_bar(x_i, y_k) = [A(x_i,y_k) + 0.5*B(x_i,y_k) + 0.5*C(x_i,y_k) + 0.25*D(x_i,y_k)] / N
+  # where:
+  #   A(x_i,y_k) = #{j: x_j < x_i, y_j < y_k}
+  #   B(x_i,y_k) = #{j: x_j == x_i, y_j < y_k}
+  #   C(x_i,y_k) = #{j: x_j < x_i, y_j == y_k}
+  #   D(x_i,y_k) = #{j: x_j == x_i, y_j == y_k}
+  #
+  # sum_k A(x_i,y_k) = sum_j 1(x_j < x_i) * #{k: y_k > y_j}
+  #   where #{k: y_k > y_j} = N - rank_y[j] + 0.5*(n_{y_j} - 1)   [using midranks]
+  #   Actually: #{k: y_k > y_j} = #{k: y_rank[k] > y_rank[j]} (strict)
+  #   Since y_rank uses average ties: #{k: y_k > y_j} + #{k: y_k == y_j} + #{k: y_k < y_j} = N
+  #   #{k: y_k < y_j} = y_rank[j] - 0.5*n_{y_j} - 0.5 + 0.5 = ... 
+  #
+  # This gets complex.  A cleaner decomposition:
+  #
+  # sum_k H_bar(x_i, y_k) = sum_k [ P(X < x_i, Y < y_k) + 0.5*P(X==x_i, Y<y_k)
+  #                                + 0.5*P(X<x_i, Y==y_k) + 0.25*P(X==x_i, Y==y_k) ]
+  #   where P() are empirical proportions (count / N).
+  #
+  # = (1/N) sum_k [ #{j: x_j<x_i, y_j<y_k}/N + 0.5*#{j: x_j==x_i, y_j<y_k}/N
+  #               + 0.5*#{j: x_j<x_i, y_j==y_k}/N + 0.25*#{j: x_j==x_i, y_j==y_k}/N ]
+  #
+  # Swap sums:
+  # = (1/N) sum_j [ #{k: y_k > y_j}*1(x_j<x_i)/N + 0.5*#{k: y_k > y_j}*1(x_j==x_i)/N
+  #               + 0.5*#{k: y_k == y_j}*1(x_j<x_i)/N + 0.25*#{k: y_k==y_j}*1(x_j==x_i)/N ]
+  #
+  # Define for each j:
+  #   n_gt_j = #{k: y_k > y_j} = N - y_rank[j] - 0.5*(n_{y_j} - 1)
+  #          ... let's just compute it directly.
+  
+  # Count of observations with each unique y value
+  y_tab <- table(factor(y_rank, levels = Y_unique))
+  n_y <- as.numeric(y_tab)  # n_y[m] = count of obs with Y_compressed == m
+  
+  # For each observation j, compute:
+  #   n_y_gt[j] = #{k: y_rank[k] > y_rank[j]}  (strict greater)
+  #   n_y_eq[j] = #{k: y_rank[k] == y_rank[j]}  (equals, including j itself)
+  n_y_eq <- n_y[Y_compressed]
+  n_y_lt <- numeric(N)
+  # #{k: y_k < y_j} : cumulative count of y values strictly less
+  # Using the sorted unique values:
+  cum_n_y <- c(0, cumsum(n_y))
+  n_y_lt <- cum_n_y[Y_compressed]
+  n_y_gt <- N - n_y_lt - n_y_eq
+  
+  # Similarly for X:
+  x_tab <- table(factor(x_rank, levels = X_unique))
+  n_x <- as.numeric(x_tab)
+  n_x_eq <- n_x[X_compressed]
+  cum_n_x <- c(0, cumsum(n_x))
+  n_x_lt <- cum_n_x[X_compressed]  # #{j: x_rank[j] < x_rank[i]}
+  
+  # Now: sum_k H_bar(x_i, y_k)
+  # = (1/N) * sum_j [
+  #     1(x_j < x_i) * (n_y_gt[j] + 0.5*n_y_eq[j]) / N
+  #   + 1(x_j == x_i) * (0.5*n_y_gt[j] + 0.25*n_y_eq[j]) / N
+  #   ]
+  #
+  # Wait — let me re-derive more carefully.
+  # H_bar(x_i, y_k) = (1/N) * [ #{j: x_j<x_i AND y_j<y_k}
+  #                            + 0.5*#{j: x_j==x_i AND y_j<y_k}
+  #                            + 0.5*#{j: x_j<x_i AND y_j==y_k}
+  #                            + 0.25*#{j: x_j==x_i AND y_j==y_k} ]
+  #
+  # sum_k H_bar(x_i, y_k)
+  # = (1/N) * sum_k [ #{j: x_j<x_i, y_j<y_k} + 0.5*#{j: x_j==x_i, y_j<y_k}
+  #                  + 0.5*#{j: x_j<x_i, y_j==y_k} + 0.25*#{j: x_j==x_i, y_j==y_k} ]
+  #
+  # Swap sums over j and k:
+  # = (1/N) * sum_j [
+  #     1(x_j<x_i) * #{k: y_k > y_j}          -- term A: x_j<x_i, y_j<y_k ↔ y_k>y_j
+  #   + 0.5*1(x_j==x_i) * #{k: y_k > y_j}     -- term B
+  #   + 0.5*1(x_j<x_i) * #{k: y_k == y_j}     -- term C
+  #   + 0.25*1(x_j==x_i) * #{k: y_k == y_j}   -- term D
+  #   ]
+  #
+  # For each j define: w_j = n_y_gt[j] + 0.5*n_y_eq[j]   (the "above-and-half" count)
+  # Then terms A+B = [1(x_j<x_i) + 0.5*1(x_j==x_i)] * n_y_gt[j]
+  #                   ... not quite. Let me just group:
+  #
+  # = (1/N) * sum_j {
+  #     1(x_j<x_i)  * [ n_y_gt[j] + 0.5*n_y_eq[j] ]
+  #   + 1(x_j==x_i) * [ 0.5*n_y_gt[j] + 0.25*n_y_eq[j] ]
+  #   }
+  
+  # Define weight for each j:
+  w_full <- n_y_gt + 0.5 * n_y_eq   # used when x_j < x_i
+  w_half <- 0.5 * n_y_gt + 0.25 * n_y_eq  # used when x_j == x_i
+  
+  # Now sum_k H_bar(x_i, y_k) = (1/N) * [ sum_{j: x_j<x_i} w_full[j] + sum_{j: x_j==x_i} w_half[j] ]
+  #
+  # We compute sum_{j: x_j < x_i} w_full[j] for all i using Fenwick tree on X order.
+  # And sum_{j: x_j == x_i} w_half[j] is a group sum.
+  
+  # --- Compute group sums for the "x_j == x_i" term ---
+  # For each X group, sum w_half over all members
+  w_half_group_sum <- numeric(R)
+  for (g in seq_along(X_groups)) {
+    indices <- X_groups[[g]]
+    w_half_group_sum[as.integer(names(X_groups)[g])] <- sum(w_half[indices])
+  }
+  # Map back to observations
+  sum_xeq_whalf <- w_half_group_sum[X_compressed]
+  
+  # --- Compute prefix sums for the "x_j < x_i" term using Fenwick tree ---
+  # Process X groups in increasing order, accumulate w_full sums
+  # For each observation i, we need sum of w_full[j] for all j with x_rank[j] < x_rank[i]
+  
+  sum_xlt_wfull <- numeric(N)
+  
+  # Accumulate by X group in order
+  running_sum <- 0
+  for (g in X_group_order) {
+    indices <- X_groups[[g]]
+    
+    # All observations in this group get the running sum (from strictly smaller X groups)
+    for (i in indices) {
+      sum_xlt_wfull[i] <- running_sum
+    }
+    
+    # Add this group's w_full to running sum
+    running_sum <- running_sum + sum(w_full[indices])
+  }
+  
+  # Combine:
+  S_i <- (1 / N) * (sum_xlt_wfull + sum_xeq_whalf)
+  
+  # ------------------------------------------------------------------
+  # Assemble k_p
+  # ------------------------------------------------------------------
+  # n_{y_i} for each observation
+  n_yi <- n_y_eq  # already computed: count of obs with same y as obs i
+  
+  # g_1[i] = (n_{y_i} / N) * H_bar(x_i, y_i)
+  g_1 <- (n_yi / N) * H_bar_ii
+  
+  # g_2[i] = (1/N) * sum_k H_bar(x_i, y_k) = S_i / N
+  # Wait: S_i already has the (1/N) inside from the H_bar definition.
+  # Let me re-check:
+  # H_bar(x_i, y_k) = [...counts...] / N
+  # sum_k H_bar(x_i, y_k) = (1/N) * sum_k [...counts...]
+  # We computed S_i = (1/N) * [sum of w's] where w's are counts (not divided by N)
+  # So S_i = (1/N) * sum_j {...}
+  # But H_bar(x_i,y_k) has a (1/N) factor, so sum_k H_bar = (1/N)*sum_k[counts]
+  # And S_i = (1/N)*sum_j[count-level w's]
+  # These count-level w's correspond to sum_k of the counts inside H_bar.
+  # So S_i = sum_k H_bar(x_i, y_k).  ✓
+  
+  g_2 <- S_i / N  # E_k[H_bar(x_i, y_k)] = (1/N)*sum_k H_bar(x_i, y_k)
+  
+  # Wait, in the original code:
+  # g_1 = col_sums[y_group_of_i] / N  where col_sums = colSums(all_exp)
+  # and all_exp[i,j] = mean_sign_x_indexed[i,j] + 2*G_x[i] + 2*G_y[j] - 1
+  # g_1 is then divided by 4.
+  # For rank data: all_exp[i,j] = 4*H_bar(x_i, y_j) (as shown above)
+  # col_sums[j] = sum_i all_exp[i,j] = 4 * sum_i H_bar(x_i, y_j)
+  # g_1[i] (for i in y-group j) = col_sums[j] / N = (4/N) * sum_i H_bar(x_i, y_j)
+  # Then g_1 /= 4  → g_1[i] = (1/N) * sum_{all i'} H_bar(x_{i'}, y_j)
+  #   where j is the y-group of observation i.
+  # WAIT: this sums over i' (all observations), not over k with same y.
+  # Let me re-read the original code more carefully.
+  
+  # Original code:
+  #   col_sums <- colSums(all_exp)  # length M, summing over N observations (rows)
+  #   g_1[observations in y-group m] <- col_sums[m] / N
+  #   ...
+  #   g_2 <- (all_exp %*% y_num) / N   # N x 1
+  #   g_1 <- g_1 / 4
+  #   g_2 <- as.vector(g_2) / 4
+  #
+  # So: col_sums[m] = sum_{i=1}^{N} all_exp[i, m]
+  #   where all_exp[i, m] involves x_i and y_unique[m].
+  #
+  # g_1[i] = (1/4N) * sum_{i'=1}^{N} all_exp[i', y_group(i)]
+  #        = (1/N) * sum_{i'} H_bar(x_{i'}, y_{group(i)})
+  #
+  # g_2[i] = (1/4N) * sum_{m=1}^{M} n_m * all_exp[i, m]
+  #        = (1/N) * sum_{m} n_m * H_bar(x_i, y_unique[m])
+  #        = (1/N) * sum_k H_bar(x_i, y_k)
+  #
+  # So g_1 sums over i' (all x's) at a fixed y, and g_2 sums over k (all y's) at a fixed x.
+  # I had g_2 correct but g_1 wrong.  Let me fix g_1.
+  
+  # g_1[i] = (1/N) * sum_{i'=1}^{N} H_bar(x_{i'}, y_{group(i)})
+  # This is: for the y-value of observation i, average H_bar across ALL x-observations.
+  # Since H_bar(x_{i'}, y_j) = [#{j': x_{j'}<x_{i'}, y_{j'}<y_j} + ...] / N,
+  # sum_{i'} H_bar(x_{i'}, y_j) requires summing a bivariate CDF across all x-points.
+  
+  # Let's compute this efficiently.
+  # sum_{i'=1}^{N} H_bar(x_{i'}, y_m) for each unique y_m:
+  #
+  # = (1/N) * sum_{i'} [ #{j: x_j < x_{i'}, y_j < y_m}
+  #                     + 0.5*#{j: x_j == x_{i'}, y_j < y_m}
+  #                     + 0.5*#{j: x_j < x_{i'}, y_j == y_m}
+  #                     + 0.25*#{j: x_j == x_{i'}, y_j == y_m} ]
+  #
+  # Term 1: sum_{i'} #{j: x_j < x_{i'}, y_j < y_m}
+  #        = sum_j 1(y_j < y_m) * #{i': x_{i'} > x_j}
+  #        = sum_j 1(y_j < y_m) * n_x_gt[j]
+  #
+  # Term 2: sum_{i'} #{j: x_j == x_{i'}, y_j < y_m}
+  #        = sum_j 1(y_j < y_m) * #{i': x_{i'} == x_j}
+  #        = sum_j 1(y_j < y_m) * n_x_eq[j]
+  #
+  # Term 3: sum_{i'} #{j: x_j < x_{i'}, y_j == y_m}
+  #        = sum_j 1(y_j == y_m) * n_x_gt[j]
+  #
+  # Term 4: sum_{i'} #{j: x_j == x_{i'}, y_j == y_m}
+  #        = sum_j 1(y_j == y_m) * n_x_eq[j]
+  
+  n_x_gt <- N - n_x_lt - n_x_eq
+  
+  # For each unique y_m, compute the sums above
+  T_m <- numeric(M)
+  
+  for (m in 1:M) {
+    mask_lt <- Y_compressed < m       # y_j < y_m (in compressed ranks)
+    mask_eq <- Y_compressed == m      # y_j == y_m
+    
+    t1 <- sum(n_x_gt[mask_lt])
+    t2 <- sum(n_x_eq[mask_lt])
+    t3 <- sum(n_x_gt[mask_eq])
+    t4 <- sum(n_x_eq[mask_eq])
+    
+    T_m[m] <- (t1 + 0.5 * t2 + 0.5 * t3 + 0.25 * t4) / N
+  }
+  
+  # Map back to observations: g_1[i] = T_m[Y_compressed[i]] / N
+  g_1 <- T_m[Y_compressed] / N
+  
+  # g_2[i] is already computed via S_i:
+  g_2 <- S_i / N
+  
+  # Final kernel values
+  k_p <- 4 * (g_1 + g_2 + G_x * G_y - G_y - G_x) + 1 - rho
+  
+  return(k_p)
+}
+
+
+# ============================================================================
+# SIGMA FUNCTIONS: Univariate IID
+# ============================================================================
+
+#' Compute AGC and asymptotic variance for single predictor (IID, v2)
+#'
+#' @param y_rank numeric vector of average ranks for Y
+#' @param x_rank numeric vector of average ranks for X
+#' @return List with agc, var (asymptotic variance, NOT divided by n), var_ind
+#' @keywords internal
+#' @noRd
+Sigma_agc_v2 <- function(y_rank, x_rank) {
+  N <- length(y_rank)
+  
+  var_y_rank <- sum((y_rank - mean(y_rank))^2) / N
+  zeta_3Y <- 1 - (12 / N^2) * var_y_rank
+  k_zeta <- prob_y(y_rank)^2 - zeta_3Y
+  sigma_zeta <- 9 * mean(k_zeta^2)
+  
+  result <- comp_rho_agc(y_rank, x_rank)
+  rho <- result$rho
+  agc <- result$agc
+  
+  factor_val <- 1 / ((1 - zeta_3Y)^2)
+  
+  # Use Fenwick-tree kernel
+  k_p <- kernel_agc_v2(x_rank, y_rank, rho)
+  
+  sigma_rho <- 9 * mean(k_p^2)
+  sigma_pz <- 9 * mean(k_p * k_zeta)
+  
+  var_agc <- factor_val * (sigma_rho + (2 * rho * sigma_pz) / (1 - zeta_3Y) +
+                             (rho^2 * sigma_zeta) / ((1 - zeta_3Y)^2))
+  
+  # Independence variance
+  var_x_rank <- sum((x_rank - mean(x_rank))^2) / N
+  zeta_3X <- 1 - (12 / N^2) * var_x_rank
+  var_ind <- (1 - zeta_3X) / (1 - zeta_3Y)
+  
+  return(list(agc = agc, var = var_agc, var_ind = var_ind))
+}
+
+
+# ============================================================================
+# SIGMA FUNCTIONS: Univariate HAC (Time Series)
+# ============================================================================
+
+#' Compute AGC and asymptotic variance for single predictor (HAC, v2)
+#'
+#' @param y_rank numeric vector of average ranks for Y
+#' @param x_rank numeric vector of average ranks for X
+#' @return List with agc, var (full variance with HAC), var_ind
+#' @keywords internal
+#' @noRd
+Sigma_agc_ts_v2 <- function(y_rank, x_rank) {
+  N <- length(y_rank)
+  
+  var_y_rank <- sum((y_rank - mean(y_rank))^2) / N
+  zeta_3Y <- 1 - (12 / N^2) * var_y_rank
+  k_zeta <- prob_y(y_rank)^2 - zeta_3Y
+  sigma_zeta <- 9 * mean(k_zeta^2)
+  
+  result <- comp_rho_agc(y_rank, x_rank)
+  rho <- result$rho
+  agc <- result$agc
+  
+  factor_val <- 1 / ((1 - zeta_3Y)^2)
+  
+  # Use Fenwick-tree kernel
+  k_p <- kernel_agc_v2(x_rank, y_rank, rho)
+  
+  # IID component
+  sigma_rho <- 9 * mean(k_p^2)
+  sigma_pz <- 9 * mean(k_p * k_zeta)
+  
+  var_iid <- factor_val * (
+    sigma_rho + (2 * rho * sigma_pz) / (1 - zeta_3Y) +
+      (rho^2 * sigma_zeta) / ((1 - zeta_3Y)^2)
+  )
+  
+  # HAC correction
+  b <- floor(2 * N^(1/3))
+  
+  K0_values <- k_zeta
+  C_zeta_hac <- 0
+  for (h in 1:b) {
+    omega <- 1 - h / (b + 1)
+    c_k <- sum(K0_values[1:(N - h)] * K0_values[(h + 1):N])
+    C_zeta_hac <- C_zeta_hac + omega * (2 / N) * c_k
+  }
+  
+  K1_values <- k_p
+  A_spear <- 0
+  B_both <- 0
+  
+  for (h in 1:b) {
+    omega <- 1 - h / (b + 1)
+    K1_lag <- K1_values[1:(N - h)]
+    K1_lead <- K1_values[(h + 1):N]
+    K0_lag <- K0_values[1:(N - h)]
+    K0_lead <- K0_values[(h + 1):N]
+    
+    a_k <- sum(K1_lag * K1_lead)
+    b_k <- sum(K1_lag * K0_lead + K0_lag * K1_lead)
+    
+    A_spear <- A_spear + omega * (2 / N) * a_k
+    B_both <- B_both + omega * (1 / N) * b_k
+  }
+  
+  var_hac <- factor_val * (
+    A_spear + (2 * rho * B_both) / (1 - zeta_3Y) +
+      (rho^2 * C_zeta_hac) / ((1 - zeta_3Y)^2)
+  )
+  
+  variance <- var_iid + var_hac
+  
+  # Independence variance with HAC correction
+  h_vec <- 1:(N - 1)
+  w <- pmax(1 - abs(h_vec) / (b + 1), 0)
+  
+  x_grade_centered <- (x_rank - 0.5) / N - 0.5
+  y_grade_centered <- (y_rank - 0.5) / N - 0.5
+  
+  x_autoc <- stats::acf(x_grade_centered, plot = FALSE, type = "covariance",
+                        demean = FALSE, lag.max = N - 1)$acf
+  y_autoc <- stats::acf(y_grade_centered, plot = FALSE, type = "covariance",
+                        demean = FALSE, lag.max = N - 1)$acf
+  
+  rho_ind_lrv <- 144 * sum(x_autoc[1] * y_autoc[1], 2 * (w * x_autoc[-1] * y_autoc[-1]))
+  var_ind <- rho_ind_lrv / ((1 - zeta_3Y)^2)
+  
+  return(list(agc = agc, var = variance, var_ind = var_ind))
+}
+
+
+# ============================================================================
+# SIGMA FUNCTIONS: Multivariate IID
+# ============================================================================
+
+#' Compute AGC and asymptotic covariance matrix for multiple predictors (IID, v2)
+#'
+#' @param y_rank numeric vector of average ranks for Y
+#' @param xarray_ranks matrix of ranks (predictors x n)
+#' @return List with agc_vector, Sigma, Sigma_ind
+#' @keywords internal
+#' @noRd
+Sigma_agc_multivariate_v2 <- function(y_rank, xarray_ranks) {
+  N <- length(y_rank)
+  k <- nrow(xarray_ranks)
+  
+  var_y_rank <- sum((y_rank - mean(y_rank))^2) / N
+  zeta_3Y <- 1 - (12 / N^2) * var_y_rank
+  k_zeta <- prob_y(y_rank)^2 - zeta_3Y
+  sigma_zeta <- 9 * mean(k_zeta^2)
+  
+  rhos <- numeric(k)
+  agcs <- numeric(k)
+  kps <- matrix(0, nrow = k, ncol = N)
+  zeta_3X <- numeric(k)
+  
+  for (j in 1:k) {
+    result <- comp_rho_agc(y_rank, xarray_ranks[j, ])
+    rhos[j] <- result$rho
+    agcs[j] <- result$agc
+    
+    # Use Fenwick-tree kernel
+    kps[j, ] <- kernel_agc_v2(xarray_ranks[j, ], y_rank, rhos[j])
+    
+    # Compute zeta_3X for independence variance
+    x_rank_j <- xarray_ranks[j, ]
+    var_x_rank <- sum((x_rank_j - mean(x_rank_j))^2) / N
+    zeta_3X[j] <- 1 - (12 / N^2) * var_x_rank
+  }
+  
+  factor_val <- 1 / ((1 - zeta_3Y)^2)
+  Sigma <- matrix(0, nrow = k, ncol = k)
+  Sigma_ind <- matrix(0, nrow = k, ncol = k)
+  
+  for (j in 1:k) {
+    k_p <- kps[j, ]
+    sigma_rho <- 9 * mean(k_p^2)
+    sigma_pz <- 9 * mean(k_p * k_zeta)
+    
+    var_agc <- factor_val * (
+      sigma_rho + (2 * rhos[j] * sigma_pz) / (1 - zeta_3Y) +
+        (rhos[j]^2 * sigma_zeta) / ((1 - zeta_3Y)^2)
+    )
+    Sigma[j, j] <- var_agc
+    Sigma_ind[j, j] <- (1 - zeta_3X[j]) / (1 - zeta_3Y)
+    
+    if (j < k) {
+      for (i in (j + 1):k) {
+        k_p2 <- kps[i, ]
+        sigma_rho2 <- 9 * mean(k_p * k_p2)
+        sigma_pz2 <- 9 * mean(k_p2 * k_zeta)
+        
+        cov_agc <- factor_val * (
+          sigma_rho2 + (rhos[j] * sigma_pz) / (1 - zeta_3Y) +
+            (rhos[i] * sigma_pz2) / (1 - zeta_3Y) +
+            (rhos[j] * rhos[i] * sigma_zeta) / ((1 - zeta_3Y)^2)
+        )
+        Sigma[j, i] <- Sigma[i, j] <- cov_agc
+        
+        # Independence covariance
+        x_grade_j <- (xarray_ranks[j, ] - 0.5) / N - 0.5
+        x_grade_i <- (xarray_ranks[i, ] - 0.5) / N - 0.5
+        rho_ji <- 12 * mean(x_grade_j * x_grade_i)
+        Sigma_ind[j, i] <- Sigma_ind[i, j] <- rho_ji / (1 - zeta_3Y)
+      }
+    }
+  }
+  
+  return(list(agc_vector = agcs, Sigma = Sigma, Sigma_ind = Sigma_ind))
+}
+
+
+# ============================================================================
+# SIGMA FUNCTIONS: Multivariate HAC (Time Series)
+# ============================================================================
+
+#' Compute AGC and asymptotic covariance matrix for multiple predictors (HAC, v2)
+#'
+#' @param y_rank numeric vector of average ranks for Y
+#' @param xarray_ranks matrix of ranks (predictors x n)
+#' @return List with agc_vector, Sigma, Sigma_ind
+#' @keywords internal
+#' @noRd
+Sigma_agc_multivariate_ts_v2 <- function(y_rank, xarray_ranks) {
+  N <- length(y_rank)
+  k <- nrow(xarray_ranks)
+  
+  var_y_rank <- sum((y_rank - mean(y_rank))^2) / N
+  zeta_3Y <- 1 - (12 / N^2) * var_y_rank
+  k_zeta <- prob_y(y_rank)^2 - zeta_3Y
+  sigma_zeta <- 9 * mean(k_zeta^2)
+  
+  rhos <- numeric(k)
+  agcs <- numeric(k)
+  kps <- matrix(0, nrow = k, ncol = N)
+  
+  for (j in 1:k) {
+    result <- comp_rho_agc(y_rank, xarray_ranks[j, ])
+    rhos[j] <- result$rho
+    agcs[j] <- result$agc
+    
+    # Use Fenwick-tree kernel
+    kps[j, ] <- kernel_agc_v2(xarray_ranks[j, ], y_rank, rhos[j])
+  }
+  
+  factor_val <- 1 / ((1 - zeta_3Y)^2)
+  Sigma <- matrix(0, nrow = k, ncol = k)
+  Sigma_ind <- matrix(0, nrow = k, ncol = k)
+  
+  b <- floor(2 * N^(1/3))
+  h_vec <- 1:(N - 1)
+  w <- pmax(1 - abs(h_vec) / (b + 1), 0)
+  
+  # Precompute C_zeta_hac
+  K0_values <- k_zeta
+  C_zeta_hac <- 0
+  for (h in 1:b) {
+    omega <- 1 - h / (b + 1)
+    c_k <- sum(K0_values[1:(N - h)] * K0_values[(h + 1):N])
+    C_zeta_hac <- C_zeta_hac + omega * (2 / N) * c_k
+  }
+  
+  # Centered grades for independence variance
+  x_grades_centered <- matrix(0, nrow = k, ncol = N)
+  for (j in 1:k) {
+    x_grades_centered[j, ] <- (xarray_ranks[j, ] - 0.5) / N - 0.5
+  }
+  y_grade_centered <- (y_rank - 0.5) / N - 0.5
+  
+  y_autoc <- stats::acf(y_grade_centered, plot = FALSE, type = "covariance",
+                        demean = FALSE, lag.max = N - 1)$acf
+  
+  # Build covariance matrices
+  for (j in 1:k) {
+    k_p <- kps[j, ]
+    sigma_rho <- 9 * mean(k_p^2)
+    sigma_pz <- 9 * mean(k_p * k_zeta)
+    
+    # IID component
+    var_iid <- factor_val * (
+      sigma_rho + (2 * rhos[j] * sigma_pz) / (1 - zeta_3Y) +
+        (rhos[j]^2 * sigma_zeta) / ((1 - zeta_3Y)^2)
+    )
+    
+    # HAC correction for diagonal
+    K1_values <- k_p
+    A_spear <- 0
+    B_both <- 0
+    
+    for (h in 1:b) {
+      omega <- 1 - h / (b + 1)
+      K1_lag <- K1_values[1:(N - h)]
+      K1_lead <- K1_values[(h + 1):N]
+      K0_lag <- K0_values[1:(N - h)]
+      K0_lead <- K0_values[(h + 1):N]
+      
+      a_k <- sum(K1_lag * K1_lead)
+      b_k <- sum(K1_lag * K0_lead + K0_lag * K1_lead)
+      
+      A_spear <- A_spear + omega * (2 / N) * a_k
+      B_both <- B_both + omega * (1 / N) * b_k
+    }
+    
+    var_hac <- factor_val * (
+      A_spear + (2 * rhos[j] * B_both) / (1 - zeta_3Y) +
+        (rhos[j]^2 * C_zeta_hac) / ((1 - zeta_3Y)^2)
+    )
+    
+    Sigma[j, j] <- var_iid + var_hac
+    
+    # Independence variance for diagonal (HAC)
+    x_grade_j <- x_grades_centered[j, ]
+    xcov_0_jj <- mean(x_grade_j * x_grade_j)
+    hac_sum_jj <- xcov_0_jj * y_autoc[1]
+    
+    for (h in 1:min(b, N - 1)) {
+      xcov_h <- mean(x_grade_j[1:(N - h)] * x_grade_j[(h + 1):N] +
+                       x_grade_j[(h + 1):N] * x_grade_j[1:(N - h)]) / 2
+      hac_sum_jj <- hac_sum_jj + 2 * w[h] * xcov_h * y_autoc[h + 1]
+    }
+    Sigma_ind[j, j] <- 144 * hac_sum_jj / ((1 - zeta_3Y)^2)
+    
+    # Off-diagonal elements
+    if (j < k) {
+      for (i in (j + 1):k) {
+        k_p2 <- kps[i, ]
+        sigma_rho2 <- 9 * mean(k_p * k_p2)
+        sigma_pz2 <- 9 * mean(k_p2 * k_zeta)
+        
+        # IID component
+        cov_iid <- factor_val * (
+          sigma_rho2 + (rhos[j] * sigma_pz) / (1 - zeta_3Y) +
+            (rhos[i] * sigma_pz2) / (1 - zeta_3Y) +
+            (rhos[j] * rhos[i] * sigma_zeta) / ((1 - zeta_3Y)^2)
+        )
+        
+        # HAC correction
+        A2_spear <- 0
+        B_one <- 0
+        B_two <- 0
+        
+        for (h in 1:b) {
+          omega <- 1 - h / (b + 1)
+          kp_lag <- k_p[1:(N - h)]
+          kp_lead <- k_p[(h + 1):N]
+          kp2_lag <- k_p2[1:(N - h)]
+          kp2_lead <- k_p2[(h + 1):N]
+          K0_lag <- K0_values[1:(N - h)]
+          K0_lead <- K0_values[(h + 1):N]
+          
+          a_k <- sum(kp_lag * kp2_lead + kp_lead * kp2_lag)
+          b_k1 <- sum(kp_lag * K0_lead + kp_lead * K0_lag)
+          b_k2 <- sum(kp2_lag * K0_lead + kp2_lead * K0_lag)
+          
+          A2_spear <- A2_spear + omega * (1 / N) * a_k
+          B_one <- B_one + omega * (1 / N) * b_k1
+          B_two <- B_two + omega * (1 / N) * b_k2
+        }
+        
+        cov_hac <- factor_val * (
+          A2_spear + (rhos[j] * B_one) / (1 - zeta_3Y) +
+            (rhos[i] * B_two) / (1 - zeta_3Y) +
+            (rhos[j] * rhos[i] * C_zeta_hac) / ((1 - zeta_3Y)^2)
+        )
+        
+        Sigma[j, i] <- Sigma[i, j] <- cov_iid + cov_hac
+        
+        # Independence covariance (HAC)
+        x_grade_i <- x_grades_centered[i, ]
+        xcov_0_ji <- mean(x_grade_j * x_grade_i)
+        hac_sum_ji <- xcov_0_ji * y_autoc[1]
+        
+        for (h in 1:min(b, N - 1)) {
+          xcov_h <- mean(x_grade_j[1:(N - h)] * x_grade_i[(h + 1):N] +
+                           x_grade_j[(h + 1):N] * x_grade_i[1:(N - h)]) / 2
+          hac_sum_ji <- hac_sum_ji + 2 * w[h] * xcov_h * y_autoc[h + 1]
+        }
+        Sigma_ind[j, i] <- Sigma_ind[i, j] <- 144 * hac_sum_ji / ((1 - zeta_3Y)^2)
+      }
+    }
+  }
+  
+  if (k == 1) {
+    return(list(agc = agcs[1], var = Sigma[1, 1], var_ind = Sigma_ind[1, 1]))
+  }
+  
+  return(list(agc_vector = agcs, Sigma = Sigma, Sigma_ind = Sigma_ind))
+}

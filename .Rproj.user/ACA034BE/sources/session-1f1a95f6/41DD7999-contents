@@ -1,0 +1,69 @@
+
+set.seed(42); n <- 2000
+X <- sample(1:10, n, replace = TRUE); Y <- rnorm(n)
+y_rank <- rank(Y, ties.method = "average")
+x_rank <- rank(X, ties.method = "average")
+
+cat("original:", system.time(for(i in 1:5) Sigma_agc(y_rank, x_rank))["elapsed"] / 5, "s\n")
+cat("v2:      ", system.time(for(i in 1:5) Sigma_agc_v2(y_rank, x_rank))["elapsed"] / 5, "s\n")
+
+
+# Quick benchmark: AGC kernel versions for binary Y
+# Run interactively to check if binary specialization is faster
+
+library(projectR)  # Replace with your actual package name
+# source("agc_functions_binary.R")  # if not yet in package
+
+make_ranks <- function(X, Y) {
+  y_rank <- rank(Y, ties.method = "average")
+  x_rank <- rank(X, ties.method = "average")
+  list(y_rank = y_rank, x_rank = x_rank)
+}
+
+time_med <- function(expr_fn, reps = 5) {
+  median(replicate(reps, system.time(expr_fn())["elapsed"]))
+}
+
+cat("\n")
+cat(strrep("=", 70), "\n")
+cat("  AGC binary Y benchmark: original vs binary vs v2 (IID)\n")
+cat(strrep("=", 70), "\n")
+cat(sprintf("  %-20s  %10s  %10s  %10s\n", "Scenario", "original", "binary", "v2"))
+cat(strrep("-", 70), "\n")
+
+for (n in c(200, 500, 2000, 5000, 10000)) {
+  set.seed(42)
+  X <- rnorm(n)
+  Y <- rbinom(n, 1, 0.5)
+  rk <- make_ranks(X, Y)
+  
+  t_orig   <- time_med(function() Sigma_agc(rk$y_rank, rk$x_rank))
+  t_binary <- time_med(function() Sigma_agc_binary(rk$y_rank, rk$x_rank))
+  t_v2     <- time_med(function() Sigma_agc_v2(rk$y_rank, rk$x_rank))
+  
+  fastest <- which.min(c(t_orig, t_binary, t_v2))
+  marks <- c("", "", "")
+  marks[fastest] <- "*"
+  
+  cat(sprintf("  n=%-17d  %9.4f%s  %9.4f%s  %9.4f%s\n",
+              n, t_orig, marks[1], t_binary, marks[2], t_v2, marks[3]))
+}
+
+cat(strrep("-", 70), "\n")
+cat("  * = fastest\n\n")
+
+# Also check correctness
+cat("Correctness check (n=1000, binary Y):\n")
+set.seed(99); n <- 1000
+X <- rnorm(n); Y <- rbinom(n, 1, 0.5)
+rk <- make_ranks(X, Y)
+
+r_orig   <- Sigma_agc(rk$y_rank, rk$x_rank)
+r_binary <- Sigma_agc_binary(rk$y_rank, rk$x_rank)
+
+cat(sprintf("  agc:     orig=%.10f  binary=%.10f  match=%s\n",
+            r_orig$agc, r_binary$agc, all.equal(r_orig$agc, r_binary$agc, tolerance = 1e-10)))
+cat(sprintf("  var:     orig=%.10f  binary=%.10f  match=%s\n",
+            r_orig$var, r_binary$var, all.equal(r_orig$var, r_binary$var, tolerance = 1e-10)))
+cat(sprintf("  var_ind: orig=%.10f  binary=%.10f  match=%s\n",
+            r_orig$var_ind, r_binary$var_ind, all.equal(r_orig$var_ind, r_binary$var_ind, tolerance = 1e-10)))
