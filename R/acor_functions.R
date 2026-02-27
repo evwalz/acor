@@ -127,7 +127,7 @@ acor <- function(X, Y, method = c("akc", "agc", "cid", "cma")) {
 #'     \item "less": tests if correlation is less than null value
 #'   }
 #' @param conf.level Confidence level (default 0.95)
-#' @param Fisher Logical; if TRUE, uses Fisher transformation for confidence interval.
+#' @param fisher Logical; if TRUE, uses Fisher transformation for confidence interval.
 #' @param IID Logical; if FALSE inference performed under time series assumptions and thus HAC variance estimator is computed 
 #' 
 #' @return A list containing:
@@ -139,8 +139,8 @@ acor <- function(X, Y, method = c("akc", "agc", "cid", "cma")) {
 #'   \item{alternative}{The alternative hypothesis}
 #'   \item{method}{The method used}
 #'   \item{CI}{Confidence interval}
-#'   \item{Fisher}{Logical indicating if Fisher transformation was used}
-#'   \item{IID}{Logical indicating if iid or time series assumptions were used}
+#'   \item{fisher}{Logical indicating if Fisher transformation was used}
+#'   \item{IID}{Logical indicating if IID or time series assumptions were used}
 #'   
 #' @details
 #' For a single predictor X, tests H0: correlation = null.value
@@ -169,13 +169,12 @@ acor <- function(X, Y, method = c("akc", "agc", "cid", "cma")) {
 #' test_result <- acor.test(X, y, method = "akc")
 #' 
 #' @importFrom stats qnorm pnorm pchisq acf cov
-#' @importFrom MASS ginv
 #' @export
 acor.test <- function(X, Y, 
                       method = c("akc", "agc", "cid", "cma"),
                       alternative = c("two.sided", "less", "greater"),
                       conf.level = 0.95,
-                      Fisher = FALSE, 
+                      fisher = FALSE, 
                       IID = TRUE
 ) {
   
@@ -307,7 +306,7 @@ acor.test <- function(X, Y,
     }
     
     # Confidence interval
-    if (Fisher) {
+    if (fisher) {
       # Fisher transformation - always compute on AKC/AGC scale first
       if (method %in% c("cid", "cma")) {
         # Transform estimate back to [-1, 1] scale for Fisher transformation
@@ -346,13 +345,31 @@ acor.test <- function(X, Y,
       estimate = estimates,
       variance = variance,
       variance_ind = variance_ind,
-      Fisher = Fisher,
+      Fisher = fisher,
       conf.int = CI,
       conf.level = conf.level,
       alternative = alternative,
       method = paste(toupper(method), "test"),
       IID = IID
     )
+    
+    ## versus htest object:
+    #out <- structure(list(
+    #  statistic = c(z = test_stat),
+    #  statistic_ind = c(z_ind = test_stat_ind),
+    #  p.value = p_value,
+    #  p.value_ind = p_value_ind,
+    #  estimate = c(akc = estimates),  # or whichever method
+    #  variance = variance,
+    #  variance_ind = variance_ind,
+    #  Fisher = fisher,
+    #  null.value = c(correlation = null.value),
+    #  alternative = alternative,
+    #  method = paste(toupper(method), "test"),
+    #  data.name = paste(deparse(substitute(X)), "and", deparse(substitute(Y))),
+    #  conf.int = structure(CI, conf.level = conf.level),
+    #  IID = IID
+    #), class = "htest")
     
   } else {
     # Multiple predictors (m >= 2)
@@ -420,7 +437,7 @@ acor.test <- function(X, Y,
     }
     
     # Confidence intervals for individual predictors
-    if (Fisher) {
+    if (fisher) {
       # Fisher transformation for individual CIs
       if (method %in% c("cid", "cma")) {
         est_transformed <- 2 * estimates - 1  # CID/CMA -> AKC/AGC scale
@@ -472,7 +489,7 @@ acor.test <- function(X, Y,
       estimate = estimates,
       variance = variance,
       variance_ind = variance_ind,
-      Fisher = Fisher,
+      Fisher = fisher,
       conf.level = conf.level,
       alternative = alternative,
       method = paste(toupper(method), "test"),

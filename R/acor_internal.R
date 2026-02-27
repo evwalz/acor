@@ -22,6 +22,8 @@ validate_acor_inputs <- function(X, Y) {
   if (nrow(X) != n) {
     stop("X and Y must have the same number of observations")
   }
+  if (any(is.na(X)) || any(is.na(Y))) stop("NA values not supported; remove NAs first")
+  if (length(unique(Y)) < 2) stop("Y must have at least 2 distinct values")
   m <- ncol(X)
   list(X = X, Y = Y, n = n, m = m)
 }

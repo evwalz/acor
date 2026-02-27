@@ -37,10 +37,3 @@ acor.test(X, y, method = "agc")
 - **CID** = (AKC + 1) / 2
 - **CMA** = (AGC + 1) / 2
 
-## Structure
-
-- `R/acor_functions.R`: Main API (`acor`, `acor.test`)
-- `R/acor_internal.R`: Internal helpers
-- `R/akc_functions.R`: AKC/Kendall implementation
-- `R/agc_functions.R`: AGC/Spearman implementation
-

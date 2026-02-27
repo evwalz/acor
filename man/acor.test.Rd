@@ -10,7 +10,7 @@ acor.test(
   method = c("akc", "agc", "cid", "cma"),
   alternative = c("two.sided", "less", "greater"),
   conf.level = 0.95,
-  Fisher = FALSE,
+  fisher = FALSE,
   IID = TRUE
 )
 }
@@ -30,7 +30,7 @@ acor.test(
 
 \item{conf.level}{Confidence level (default 0.95)}
 
-\item{Fisher}{Logical; if TRUE, uses Fisher transformation for confidence interval.}
+\item{fisher}{Logical; if TRUE, uses Fisher transformation for confidence interval.}
 
 \item{IID}{Logical; if FALSE inference performed under time series assumptions and thus HAC variance estimator is computed}
 }
@@ -44,8 +44,8 @@ A list containing:
 \item{alternative}{The alternative hypothesis}
 \item{method}{The method used}
 \item{CI}{Confidence interval}
-\item{Fisher}{Logical indicating if Fisher transformation was used}
-\item{IID}{Logical indicating if iid or time series assumptions were used}
+\item{fisher}{Logical indicating if Fisher transformation was used}
+\item{IID}{Logical indicating if IID or time series assumptions were used}
 }
 \description{
 Statistical Test for Asymmetric Correlation

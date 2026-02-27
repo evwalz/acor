@@ -10,17 +10,19 @@ Description: Computes and tests correlation measures: AKC (Asymmetric Kendall Co
     AGC (Asymmetric Grade Correlation), CID (Concordance-Discordance Index), and CMA
     (Coefficient of Monotone Association). Supports single and multiple predictors, IID and
     time-series (HAC) variance estimation. Methods are described in
-    Walz (2025) <arXiv:>.
+    Walz (2025) <arXiv:2510.17994>.
 License: MIT + file LICENSE
-URL: https://github.com/yourname/yourpackage
-BugReports: https://github.com/yourname/yourpackage/issues
+URL: https://github.com/evwalz/acor
+BugReports: https://github.com/evwalz/acor/issues
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
-Depends: R (>= 3.5.0)
+Depends: R (>= 4.0.0)
 Imports:
     stats,
-    MASS
+    MASS,
+    Rcpp
+LinkingTo: Rcpp
 Suggests:
     testthat (>= 3.0.0),
     pROC,

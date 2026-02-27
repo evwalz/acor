@@ -8,15 +8,6 @@
 # CORE HELPERS
 # ============================================================================
 
-#' Check if Y is binary
-#' @param Y Numeric vector.
-#' @return Logical scalar.
-#' @keywords internal
-#' @noRd
-is_binary <- function(Y) {
-  length(unique(Y)) == 2
-}
-
 #' Dispatch tau_Y computation (binary-optimized or general)
 #'
 #' @param Y Numeric outcome vector.
@@ -35,7 +26,7 @@ compute_tau_Y <- function(Y) {
 #' @keywords internal
 #' @noRd
 compute_kendall <- function(X, Y) {
-  if (is_binary(Y)) kendall_tau_sign_binary(X, Y) else kendall_tau_sign(X, Y)
+  if (is_binary(Y)) kendall_tau_sign_binary(X, Y) else kendall_tau_sign_cpp(X, Y)
 }
 
 #' Ensure X is a matrix
@@ -399,18 +390,11 @@ kendall_tau_sign_binary <- function(X, Y) {
 tau_Y_func <- function(Y) {
   n <- length(Y)
   num_pairs <- n * (n - 1) / 2
-  
-  sign_squared_sum <- 0
-  n_ties_y <- 0
-  
-  for (i in 1:(n - 1)) {
-    j_vals <- (i + 1):n
-    sgn_y <- sign(Y[j_vals] - Y[i])
-    sign_squared_sum <- sign_squared_sum + sum(sgn_y * sgn_y)
-    n_ties_y <- n_ties_y + sum(Y[j_vals] == Y[i])
-  }
-  
-  list(expectation = sign_squared_sum / num_pairs, p_tie_y = n_ties_y / num_pairs)
+  freq <- as.numeric(table(Y))
+  n_ties_y <- sum(freq * (freq - 1) / 2)
+  p_tie_y <- n_ties_y / num_pairs
+  expectation <- (num_pairs - n_ties_y) / num_pairs
+  list(expectation = expectation, p_tie_y = p_tie_y)
 }
 
 #' General Kendall tau sign for non-binary Y
@@ -452,14 +436,20 @@ kendall_tau_sign <- function(X, Y) {
 # KERNEL FUNCTIONS (point-wise, O(n) per observation)
 # ============================================================================
 
+#' @keywords internal
+#' @noRd
 F_bar <- function(x, X) {
   mean(X < x) + 0.5 * mean(X == x)
 }
 
+#' @keywords internal
+#' @noRd
 G_bar <- function(y, Y) {
   mean(Y < y) + 0.5 * mean(Y == y)
 }
 
+#' @keywords internal
+#' @noRd
 H_bar <- function(x, y, X, Y) {
   p_both_less <- mean((X < x) & (Y < y))
   p_x_equal_y_less <- mean((X == x) & (Y < y))
@@ -469,6 +459,8 @@ H_bar <- function(x, y, X, Y) {
   p_both_less + 0.5 * p_x_equal_y_less + 0.5 * p_x_less_y_equal + 0.25 * p_both_equal
 }
 
+#' @keywords internal
+#' @noRd
 K_tau <- function(x, y, X, Y, tau_XY) {
   h_bar <- H_bar(x, y, X, Y)
   f_bar <- F_bar(x, X)
@@ -476,11 +468,15 @@ K_tau <- function(x, y, X, Y, tau_XY) {
   4 * h_bar - 2 * (f_bar + g_bar) + 1 - tau_XY
 }
 
+#' @keywords internal
+#' @noRd
 K_p <- function(y, Y, tau_y) {
   p_y_neq_y <- mean(Y != y)
   tau_y - p_y_neq_y
 }
 
+#' @keywords internal
+#' @noRd
 kernel_expectation <- function(X, Y, tau_XY, tau_y, p_Y) {
   n <- length(X)
   squared_diffs <- numeric(n)
@@ -815,35 +811,6 @@ K_tau_vec_v1 <- function(X, Y, tau_XY) {
 }
 
 
-# ---------- V2: Fenwick tree approach ----------
-
-#' @keywords internal
-#' @noRd
-fenwick_create <- function(n) numeric(n)
-
-#' @keywords internal
-#' @noRd
-fenwick_update <- function(tree, i, delta = 1) {
-  n <- length(tree)
-  while (i <= n) {
-    tree[i] <- tree[i] + delta
-    i <- i + bitwAnd(i, -i)
-  }
-  tree
-}
-
-#' @keywords internal
-#' @noRd
-fenwick_query <- function(tree, i) {
-  if (i <= 0) return(0)
-  s <- 0
-  while (i > 0) {
-    s <- s + tree[i]
-    i <- i - bitwAnd(i, -i)
-  }
-  s
-}
-
 #' @keywords internal
 #' @noRd
 F_bar_vec_v2 <- function(X) F_bar_vec_v1(X)
@@ -957,7 +924,7 @@ H_bar_vec_v2 <- function(X, Y) {
 #' @keywords internal
 #' @noRd
 K_tau_vec_v2 <- function(X, Y, tau_XY) {
-  4 * H_bar_vec_v2(X, Y) - 2 * (F_bar_vec_v2(X) + G_bar_vec_v2(Y)) + 1 - tau_XY
+  4 * H_bar_vec_v2_cpp(X, Y) - 2 * (F_bar_vec_v2(X) + G_bar_vec_v2(Y)) + 1 - tau_XY
 }
 
 
@@ -1107,79 +1074,4 @@ Sigma_akc_multivariate_ts_v2 <- function(X, Y) {
   list(akc_vector = pre$akc_vector,
        Sigma = Sigma,
        Sigma_ind = ind_covariance_akc_hac(X, Y, pre$p_Y))
-}
-
-
-# ============================================================================
-# HYPOTHESIS TESTING (standalone, not used by acor.test)
-# ============================================================================
-
-#' Compare AKC between two predictors
-#'
-#' @param X1 Numeric predictor vector.
-#' @param X2 Numeric predictor vector.
-#' @param Y Numeric outcome vector.
-#' @return List with \code{p_value_two_sided}, \code{akc_vector}, and
-#'   \code{var_diff}.
-#' @keywords internal
-#' @noRd
-test_equality_two_predictors <- function(X1, X2, Y) {
-  X <- cbind(X1, X2)
-  
-  result <- Sigma_akc_multivariate(X, Y)
-  akc_vector <- result$akc_vector
-  Sigma <- result$Sigma
-  
-  akc_diff <- akc_vector[1] - akc_vector[2]
-  var_diff <- Sigma[1, 1] + Sigma[2, 2] - 2 * Sigma[1, 2]
-  
-  delta_n <- akc_diff / sqrt(var_diff)
-  p_value_two_sided <- 2 * (1 - pnorm(abs(delta_n)))
-  
-  list(p_value_two_sided = p_value_two_sided,
-       akc_vector = akc_vector,
-       var_diff = var_diff)
-}
-
-#' Test AKC equality across multiple predictors
-#'
-#' @param X Numeric matrix of predictors (n x m).
-#' @param Y Numeric outcome vector.
-#' @param L Optional contrast matrix; defaults to pairwise differences.
-#' @return List with \code{p_value}, \code{akc_vector}, and \code{Sigma}.
-#' @keywords internal
-#' @noRd
-test_equality_multiple_predictors <- function(X, Y, L = NULL) {
-  m <- ncol(X)
-  
-  result <- Sigma_akc_multivariate(X, Y)
-  akc_vector <- result$akc_vector
-  Sigma <- result$Sigma
-  
-  if (is.null(L)) {
-    nauc <- m
-    L <- matrix(0, nrow = nauc * (nauc - 1) / 2, ncol = nauc)
-    newa <- 1
-    for (i in 1:(nauc - 1)) {
-      newl <- nauc - i
-      L[newa:(newa + newl - 1), i] <- rep(1, newl)
-      L[newa:(newa + newl - 1), (i + 1):(i + newl)] <- -diag(newl)
-      newa <- newa + newl
-    }
-  }
-  
-  akc_diff <- L %*% akc_vector
-  L_S_Lt <- L %*% Sigma %*% t(L)
-  L_S_Lt_inv <- MASS::ginv(L_S_Lt, tol = 1e-12)
-  
-  chi_n <- as.numeric(t(akc_diff) %*% L_S_Lt_inv %*% akc_diff)
-  
-  qr_result <- qr(L_S_Lt)
-  rank_val <- qr_result$rank
-  
-  p_value <- pchisq(chi_n, df = rank_val, lower.tail = FALSE)
-  
-  list(p_value = p_value,
-       akc_vector = akc_vector,
-       Sigma = Sigma)
 }

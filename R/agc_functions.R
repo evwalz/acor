@@ -910,7 +910,7 @@ kfn_original <- function(y_rank, x_rank, rho) {
 #' @keywords internal
 #' @noRd
 kfn_v2 <- function(y_rank, x_rank, rho) {
-  kernel_agc_v2(x_rank, y_rank, rho)
+  kernel_agc_v2_cpp(x_rank, y_rank, rho)
 }
 
 #' @keywords internal
