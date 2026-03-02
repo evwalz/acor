@@ -47,22 +47,7 @@ select_kernel_version <- function(Y, X) {
   n <- length(Y)
   M <- length(unique(Y))
   
-  # Handle X: compute R for each column, take minimum
-  if (is.vector(X)) {
-    R <- length(unique(X))
-    m <- 1
-  } else {
-    R <- min(apply(X, 2, function(col) length(unique(col))))
-    m <- ncol(X)
-  }
-  
   if (M == 2) {
-    return("v1")
-  } else if (M / n < 0.25) {
-    # More than 25% ties in Y → use V1
-    return("v1")
-  } else if (R / n < 0.25) {
-    # More than 25% ties in X → use V1
     return("v1")
   } else {
     return("v2")
