@@ -168,7 +168,7 @@ acor <- function(X, Y, method = c("akc", "agc", "cid", "cma")) {
 #' X <- cbind(x1, x2)
 #' test_result <- acor.test(X, y, method = "akc")
 #' 
-#' @importFrom stats qnorm pnorm pchisq acf cov
+#' @importFrom stats setNames qnorm pnorm pchisq acf cov
 #' @export
 acor.test <- function(X, Y, 
                       method = c("akc", "agc", "cid", "cma"),

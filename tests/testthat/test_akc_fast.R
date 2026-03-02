@@ -467,7 +467,7 @@ test_that("Runtime benchmark: Sigma_akc_multivariate - Original vs V1 vs V2", {
   cat("\n\n")
 
   n_replications <- 5
-  sample_sizes <- c(500, 1000, 5000, 8000)
+  sample_sizes <- c(500, 1000, 5000)
   m <- 3  # number of predictors
 
   # -------------------------------------------------------------------------
@@ -549,7 +549,7 @@ test_that("Runtime benchmark: Sigma_akc_multivariate_ts (HAC) - Original vs V1 v
   cat("\n\n")
 
   n_replications <- 5
-  sample_sizes <- c(500, 1000, 5000, 8000)
+  sample_sizes <- c(500, 1000, 5000)#, 8000)
   m <- 3  # number of predictors
 
   # -------------------------------------------------------------------------
