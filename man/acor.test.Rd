@@ -43,7 +43,7 @@ A list containing:
 \item{conf.level}{Confidence level}
 \item{alternative}{The alternative hypothesis}
 \item{method}{The method used}
-\item{CI}{Confidence interval}
+\item{conf.int}{Confidence interval}
 \item{fisher}{Logical indicating if Fisher transformation was used}
 \item{IID}{Logical indicating if IID or time series assumptions were used}
 }

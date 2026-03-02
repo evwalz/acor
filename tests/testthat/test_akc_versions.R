@@ -17,7 +17,7 @@
 # ============================================================================
 
 library(testthat)
-library(acor)  # Replace with your actual package name
+library(acor) 
 
 # Tolerance for numerical equivalence across versions
 TOL <- 1e-10

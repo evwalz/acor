@@ -138,7 +138,7 @@ acor <- function(X, Y, method = c("akc", "agc", "cid", "cma")) {
 #'   \item{conf.level}{Confidence level}
 #'   \item{alternative}{The alternative hypothesis}
 #'   \item{method}{The method used}
-#'   \item{CI}{Confidence interval}
+#'   \item{conf.int}{Confidence interval}
 #'   \item{fisher}{Logical indicating if Fisher transformation was used}
 #'   \item{IID}{Logical indicating if IID or time series assumptions were used}
 #'   
@@ -178,6 +178,7 @@ acor.test <- function(X, Y,
                       IID = TRUE
 ) {
   
+  dname <- paste(deparse(substitute(X)), "and", deparse(substitute(Y)))
   method <- match.arg(method)
   alternative <- match.arg(alternative)
 
@@ -316,6 +317,8 @@ acor.test <- function(X, Y,
         est_transformed <- estimates
         se_transformed <- se
       }
+      # Clamp to avoid Inf from atanh at boundaries
+      est_transformed <- pmax(pmin(est_transformed, 1 - 1e-10), -1 + 1e-10)
       
       # Fisher transformation on [-1, 1] scale
       z_est <- atanh(est_transformed)
@@ -337,39 +340,39 @@ acor.test <- function(X, Y,
     }
     
     # Create result object (m == 1)
-    out <- list(
-      statistic = test_stat,
-      statistic_ind = test_stat_ind,
-      p.value = p_value,
-      p.value_ind = p_value_ind,
-      estimate = estimates,
-      variance = variance,
-      variance_ind = variance_ind,
-      Fisher = fisher,
-      conf.int = CI,
-      conf.level = conf.level,
-      alternative = alternative,
-      method = paste(toupper(method), "test"),
-      IID = IID
-    )
+    # out <- list(
+    #   statistic = test_stat,
+    #   statistic_ind = test_stat_ind,
+    #   p.value = p_value,
+    #   p.value_ind = p_value_ind,
+    #   estimate = estimates,
+    #   variance = variance,
+    #   variance_ind = variance_ind,
+    #   Fisher = fisher,
+    #   conf.int = CI,
+    #   conf.level = conf.level,
+    #   alternative = alternative,
+    #   method = paste(toupper(method), "test"),
+    #   IID = IID
+    # )
     
     ## versus htest object:
-    #out <- structure(list(
-    #  statistic = c(z = test_stat),
-    #  statistic_ind = c(z_ind = test_stat_ind),
-    #  p.value = p_value,
-    #  p.value_ind = p_value_ind,
-    #  estimate = c(akc = estimates),  # or whichever method
-    #  variance = variance,
-    #  variance_ind = variance_ind,
-    #  Fisher = fisher,
-    #  null.value = c(correlation = null.value),
-    #  alternative = alternative,
-    #  method = paste(toupper(method), "test"),
-    #  data.name = paste(deparse(substitute(X)), "and", deparse(substitute(Y))),
-    #  conf.int = structure(CI, conf.level = conf.level),
-    #  IID = IID
-    #), class = "htest")
+    out <- structure(list(
+     statistic = c(z = test_stat),
+     statistic_ind = c(z_ind = test_stat_ind),
+     p.value = p_value,
+     p.value_ind = p_value_ind,
+     estimate = setNames(estimates, method),  # or whichever method
+     variance = variance,
+     variance_ind = variance_ind,
+     Fisher = fisher,
+     null.value = c(correlation = null.value),
+     alternative = alternative,
+     method = paste(toupper(method), "test"),
+     data.name = dname,
+     conf.int = structure(CI, conf.level = conf.level),
+     IID = IID
+    ), class = c("acor_htest", "htest"))
     
   } else {
     # Multiple predictors (m >= 2)
@@ -447,6 +450,9 @@ acor.test <- function(X, Y,
         se_transformed <- se_individual
       }
       
+      # Clamp to avoid Inf from atanh at boundaries
+      est_transformed <- pmax(pmin(est_transformed, 1 - 1e-10), -1 + 1e-10)
+      
       z_est <- atanh(est_transformed)
       deriv <- 1 / (1 - est_transformed^2)
       se_z <- se_transformed * abs(deriv)
@@ -496,11 +502,14 @@ acor.test <- function(X, Y,
       IID = IID,
       results = results_table,
       pairwise_differences = est_diff,
-      contrast_matrix = L
+      contrast_matrix = L, 
+      null.value = c(difference = 0),
+      data.name = dname
     )
+    class(out) <- "acor_htest"
   }
   
-  class(out) <- c("acor_htest")
+  
   return(out)
 }
 

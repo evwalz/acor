@@ -355,16 +355,17 @@ kendall_tau_sign_binary <- function(X, Y) {
   idx1 <- which(Y == unique_vals[2])
   
   X0 <- X[idx0]
-  X1 <- X[idx1]
+  X1_sorted <- sort(X[idx1])
   n0 <- length(X0)
-  n1 <- length(X1)
+  n1 <- length(X1_sorted)
   
-  concordant <- 0
-  discordant <- 0
-  for (x0 in X0) {
-    concordant <- concordant + sum(X1 > x0)
-    discordant <- discordant + sum(X1 < x0)
-  }
+  # For each x0: count how many in X1 are strictly less, and strictly greater
+  count_leq <- findInterval(X0, X1_sorted)           # X1 <= x0
+  count_less <- findInterval(X0, X1_sorted, left.open = TRUE)  # X1 < x0
+  count_greater <- n1 - count_leq
+  
+  concordant <- sum(count_greater)
+  discordant <- sum(count_less)
   
   num_pairs <- n * (n - 1) / 2
   n_ties_y <- n0 * (n0 - 1) / 2 + n1 * (n1 - 1) / 2
@@ -822,103 +823,6 @@ G_bar_vec_v2 <- function(Y) F_bar_vec_v1(Y)
 #' @keywords internal
 #' @noRd
 K_p_vec_v2 <- function(Y, tau_y) K_p_vec_v1(Y, tau_y)
-
-#' H_bar for all observations using Fenwick tree -- O(n log n)
-#' @keywords internal
-#' @noRd
-H_bar_vec_v2 <- function(X, Y) {
-  n <- length(X)
-  
-  # Coordinate compression for X
-  X_order <- order(X)
-  X_rank <- integer(n)
-  X_rank[X_order] <- 1:n
-  X_sorted <- X[X_order]
-  for (i in 2:n) {
-    if (X_sorted[i] == X_sorted[i - 1]) {
-      X_rank[X_order[i]] <- X_rank[X_order[i - 1]]
-    }
-  }
-  X_unique_ranks <- sort(unique(X_rank))
-  X_rank_compressed <- match(X_rank, X_unique_ranks)
-  
-  # Same for Y
-  Y_order <- order(Y)
-  Y_rank <- integer(n)
-  Y_rank[Y_order] <- 1:n
-  Y_sorted <- Y[Y_order]
-  for (i in 2:n) {
-    if (Y_sorted[i] == Y_sorted[i - 1]) {
-      Y_rank[Y_order[i]] <- Y_rank[Y_order[i - 1]]
-    }
-  }
-  Y_unique_ranks <- sort(unique(Y_rank))
-  Y_rank_compressed <- match(Y_rank, Y_unique_ranks)
-  M <- length(Y_unique_ranks)
-  
-  X_groups <- split(1:n, X_rank_compressed)
-  
-  count_both_less    <- integer(n)
-  count_x_less_y_eq  <- integer(n)
-  
-  tree <- fenwick_create(M)
-  X_rank_order <- order(as.integer(names(X_groups)))
-  
-  for (g in X_rank_order) {
-    indices <- X_groups[[names(X_groups)[g]]]
-    for (i in indices) {
-      y_rank <- Y_rank_compressed[i]
-      if (y_rank > 1) {
-        count_both_less[i] <- fenwick_query(tree, y_rank - 1)
-      }
-      count_x_less_y_eq[i] <- fenwick_query(tree, y_rank) -
-        fenwick_query(tree, y_rank - 1)
-    }
-    for (i in indices) {
-      tree <- fenwick_update(tree, Y_rank_compressed[i], 1)
-    }
-  }
-  
-  count_x_eq_y_less <- integer(n)
-  count_both_eq     <- integer(n)
-  
-  for (group_name in names(X_groups)) {
-    indices <- X_groups[[group_name]]
-    y_ranks_in_group <- Y_rank_compressed[indices]
-    y_order <- order(y_ranks_in_group)
-    sorted_indices <- indices[y_order]
-    sorted_y_ranks <- y_ranks_in_group[y_order]
-    
-    cumcount <- 0
-    prev_y_rank <- -1
-    same_y_count <- 0
-    
-    for (k in seq_along(sorted_indices)) {
-      i <- sorted_indices[k]
-      y_rank <- sorted_y_ranks[k]
-      
-      if (y_rank == prev_y_rank) {
-        same_y_count <- same_y_count + 1
-      } else {
-        cumcount <- cumcount + same_y_count
-        same_y_count <- 1
-        prev_y_rank <- y_rank
-      }
-      count_x_eq_y_less[i] <- cumcount
-    }
-    
-    xy_pairs <- paste(X_rank_compressed[indices], Y_rank_compressed[indices],
-                      sep = "_")
-    pair_counts <- table(xy_pairs)
-    for (i in indices) {
-      pair_key <- paste(X_rank_compressed[i], Y_rank_compressed[i], sep = "_")
-      count_both_eq[i] <- pair_counts[[pair_key]]
-    }
-  }
-  
-  (count_both_less + 0.5 * count_x_eq_y_less +
-      0.5 * count_x_less_y_eq + 0.25 * count_both_eq) / n
-}
 
 #' K_tau for all observations -- O(n log n)
 #' @keywords internal

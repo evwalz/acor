@@ -1,9 +1,7 @@
 # Tests for correlation measure equivalences
-# This test suite verifies theoretical equivalences between different correlation measures
-# under specific conditions (binary Y, no ties, etc.)
 
 library(testthat)
-library(acor)  # Replace with your actual package name
+library(acor) 
 
 # Helper function to compute Harrell's C-index
 compute_harrell_c <- function(X, Y) {

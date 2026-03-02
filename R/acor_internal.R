@@ -13,11 +13,14 @@ validate_acor_inputs <- function(X, Y) {
   if (!is.numeric(Y) || !is.vector(Y)) {
     stop("Y must be a numeric vector")
   }
+
   if (is.vector(X)) {
+    if (!is.numeric(X)) stop("X must be a numeric vector or matrix")
     X <- matrix(X, ncol = 1)
-  } else if (!is.matrix(X)) {
+  } else if (!is.matrix(X) || !is.numeric(X)) {
     stop("X must be a numeric vector or matrix")
   }
+  
   n <- length(Y)
   if (nrow(X) != n) {
     stop("X and Y must have the same number of observations")
@@ -56,14 +59,11 @@ select_kernel_version <- function(Y, X) {
   if (M == 2) {
     return("v1")
   } else if (M / n < 0.25) {
-    # More than 55% ties in Y → use V1
+    # More than 25% ties in Y → use V1
     return("v1")
   } else if (R / n < 0.25) {
-    # More than 55% ties in X → use V1
+    # More than 25% ties in X → use V1
     return("v1")
-  } else if (n < 2000 / sqrt(m)) {
-    # Large sample with few ties → use V2 (Fenwick tree)
-    return("original")
   } else {
     return("v2")
   }
@@ -177,20 +177,6 @@ select_agc_kernel_version <- function(Y, X) {
   # Binary Y gets its own specialization
   if (M == 2) {
     return("binary")
-  }
-  
-  if (is.vector(X)) {
-    R <- length(unique(X))
-    m <- 1
-  } else {
-    R <- min(apply(X, 2, function(col) length(unique(col))))
-    m <- ncol(X)
-  }
-  
-  if (M / n < 0.25 && R / n < 0.25) {
-    return("original")
-  } else if (n < 2000 / sqrt(m)) {
-    return("original")
   } else {
     return("v2")
   }
@@ -259,4 +245,11 @@ compute_agc_multivariate_variance_auto <- function(y_rank, xarray_ranks, IID = T
       return(Sigma_agc_multivariate_ts_v2(y_rank, xarray_ranks))
     }
   }
+}
+
+#' @keywords internal
+#' @noRd
+is_binary <- function(Y) {
+  unique_vals <- unique(Y)
+  length(unique_vals) == 2
 }

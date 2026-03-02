@@ -12,7 +12,7 @@
 
 library(testthat)
 library(survival)
-library(acor)  # Replace with your actual package name
+library(acor) 
 
 # ============================================================================
 # Test A: Compare CID variance to survival::concordance
@@ -499,7 +499,7 @@ test_that("Binary Y: Variance estimates are consistent across methods", {
   delong_var <- pROC::var(roc_obj)
   
   # All estimates should be equal
-  expect_equal(result_cma$estimate, result_cid$estimate, tolerance = 1e-10)
+  expect_equal(unname(result_cma$estimate), unname(result_cid$estimate), tolerance = 1e-10)
   expect_equal(unname(result_cma$estimate), unname(conc$concordance), tolerance = 1e-8)
   expect_equal(unname(result_cma$estimate), as.numeric(pROC::auc(roc_obj)), tolerance = 1e-8)
   
@@ -1035,7 +1035,7 @@ test_that("m=3: Individual estimates match marginal tests", {
   for (i in 1:3) {
     result_single <- acor.test(X[, i], Y, method = "agc")
     
-    expect_equal(result_multi$results$estimate[i], result_single$estimate,
+    expect_equal(result_multi$results$estimate[i], unname(result_single$estimate),
                  tolerance = 1e-10,
                  info = sprintf("X%d estimate should match single-predictor result", i))
   }
