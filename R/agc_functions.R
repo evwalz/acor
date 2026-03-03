@@ -202,7 +202,7 @@ agc_hac_offdiag_terms <- function(k_p1, k_p2, k_zeta, b, N) {
 agc_assemble_hac_variance <- function(rho, zeta_3Y, sigma_zeta,
                                       A_spear, B_both, C_zeta_hac) {
   factor_val <- 1 / ((1 - zeta_3Y)^2)
-  factor_val * (A_spear + (2 * rho * B_both) / (1 - zeta_3Y) +
+  factor_val * 9 * (A_spear + (2 * rho * B_both) / (1 - zeta_3Y) +
                   (rho^2 * C_zeta_hac) / ((1 - zeta_3Y)^2))
 }
 
@@ -222,7 +222,7 @@ agc_assemble_hac_variance <- function(rho, zeta_3Y, sigma_zeta,
 agc_assemble_hac_covariance <- function(rho_j, rho_i, zeta_3Y, sigma_zeta,
                                         A2_spear, B_one, B_two, C_zeta_hac) {
   factor_val <- 1 / ((1 - zeta_3Y)^2)
-  factor_val * (A2_spear + (rho_j * B_one) / (1 - zeta_3Y) +
+  factor_val * 9 * (A2_spear + (rho_j * B_one) / (1 - zeta_3Y) +
                   (rho_i * B_two) / (1 - zeta_3Y) +
                   (rho_j * rho_i * C_zeta_hac) / ((1 - zeta_3Y)^2))
 }
@@ -257,21 +257,22 @@ ind_variance_agc_iid <- function(x_rank, N, zeta_3Y) {
 #' @keywords internal
 #' @noRd
 ind_variance_agc_hac <- function(x_rank, y_rank, N, zeta_3Y, b) {
-  h_vec <- 1:(N - 1)
-  w <- pmax(1 - abs(h_vec) / (b + 1), 0)
-  
-  x_grade_centered <- (x_rank - 0.5) / N - 0.5
-  y_grade_centered <- (y_rank - 0.5) / N - 0.5
-  
-  x_autoc <- stats::acf(x_grade_centered, plot = FALSE, type = "covariance",
-                        demean = FALSE, lag.max = N - 1)$acf
-  y_autoc <- stats::acf(y_grade_centered, plot = FALSE, type = "covariance",
-                        demean = FALSE, lag.max = N - 1)$acf
-  
-  rho_ind_lrv <- 144 * sum(x_autoc[1] * y_autoc[1],
-                           2 * (w * x_autoc[-1] * y_autoc[-1]))
-  rho_ind_lrv / ((1 - zeta_3Y)^2)
+ h_vec <- 1:(N - 1)
+ w <- pmax(1 - abs(h_vec) / (b + 1), 0)
+
+ x_grade_centered <- (x_rank - 0.5) / N - 0.5
+ y_grade_centered <- (y_rank - 0.5) / N - 0.5
+
+ x_autoc <- stats::acf(x_grade_centered, plot = FALSE, type = "covariance",
+                       demean = FALSE, lag.max = N - 1)$acf
+ y_autoc <- stats::acf(y_grade_centered, plot = FALSE, type = "covariance",
+                       demean = FALSE, lag.max = N - 1)$acf
+
+ rho_ind_lrv <- 144 * sum(x_autoc[1] * y_autoc[1],
+                          2 * (w * x_autoc[-1] * y_autoc[-1]))
+ rho_ind_lrv / ((1 - zeta_3Y)^2)
 }
+
 
 #' Multivariate IID independence covariance for AGC
 #'
@@ -317,41 +318,43 @@ ind_covariance_agc_iid <- function(xarray_ranks, N, zeta_3Y) {
 #' @noRd
 ind_covariance_agc_hac <- function(xarray_ranks, y_rank, N, zeta_3Y, b) {
   k <- nrow(xarray_ranks)
-  
+
   h_vec <- 1:(N - 1)
   w <- pmax(1 - abs(h_vec) / (b + 1), 0)
-  
+
   x_grades_centered <- matrix(0, nrow = k, ncol = N)
   for (j in 1:k) {
     x_grades_centered[j, ] <- (xarray_ranks[j, ] - 0.5) / N - 0.5
   }
   y_grade_centered <- (y_rank - 0.5) / N - 0.5
-  
+
   y_autoc <- stats::acf(y_grade_centered, plot = FALSE, type = "covariance",
                         demean = FALSE, lag.max = N - 1)$acf
-  
+
   Sigma_ind <- matrix(0, nrow = k, ncol = k)
-  
+
   for (j in 1:k) {
     for (l in j:k) {
       x_grade_j <- x_grades_centered[j, ]
       x_grade_l <- x_grades_centered[l, ]
-      
+
       xcov_0 <- mean(x_grade_j * x_grade_l)
       hac_sum <- xcov_0 * y_autoc[1]
-      
+
       for (h in seq_len(min(b, N - 1))) {
         xcov_h <- mean(x_grade_j[1:(N - h)] * x_grade_l[(h + 1):N] +
                          x_grade_j[(h + 1):N] * x_grade_l[1:(N - h)]) / 2
         hac_sum <- hac_sum + 2 * w[h] * xcov_h * y_autoc[h + 1]
       }
-      
+
       Sigma_ind[j, l] <- 144 * hac_sum / ((1 - zeta_3Y)^2)
       if (j != l) Sigma_ind[l, j] <- Sigma_ind[j, l]
     }
   }
   Sigma_ind
 }
+
+
 
 
 # ============================================================================
