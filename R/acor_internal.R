@@ -40,7 +40,7 @@ validate_acor_inputs <- function(X, Y) {
 #' 
 #' @param Y Numeric outcome vector
 #' @param X Numeric predictor vector or matrix
-#' @return Character: "v1", "v2", or "original"
+#' @return Character: "v1" or "v2" 
 #' @keywords internal
 #' @noRd
 select_kernel_version <- function(Y, X) {
@@ -64,19 +64,11 @@ select_kernel_version <- function(Y, X) {
 #' @param X Numeric predictor vector
 #' @param Y Numeric outcome vector
 #' @param IID Logical; if TRUE uses IID variance, if FALSE uses HAC
-#' @param version Character: "v1", "v2", or "original"
+#' @param version Character: "v1" or "v2"
 #' @return List with akc, var, and var_ind
 #' @keywords internal
 #' @noRd
-compute_akc_variance_auto <- function(X, Y, IID = TRUE, version = "original") {
-  
-  if (version == "original") {
-    if (IID) {
-      return(Sigma_akc(X, Y))
-    } else {
-      return(Sigma_akc_ts(X, Y))
-    }
-  }
+compute_akc_variance_auto <- function(X, Y, IID = TRUE, version = "v2") {
   
   # For v1 and v2, compute tau values first (shared across var and var_ind)
   if (is_binary(Y)) {
@@ -84,7 +76,7 @@ compute_akc_variance_auto <- function(X, Y, IID = TRUE, version = "original") {
     akc_result   <- kendall_tau_sign_binary(X, Y)
   } else {
     tau_Y_result <- tau_Y_func(Y)
-    akc_result   <- kendall_tau_sign(X, Y)
+    akc_result   <- kendall_tau_sign_cpp(X, Y)
   }
   
   tau_Y  <- tau_Y_result$expectation
@@ -111,24 +103,20 @@ compute_akc_variance_auto <- function(X, Y, IID = TRUE, version = "original") {
 #' @param X Numeric matrix of predictors (n x m)
 #' @param Y Numeric outcome vector
 #' @param IID Logical; if TRUE uses IID variance, if FALSE uses HAC
-#' @param version Character: "v1", "v2", or "original"
+#' @param version Character: "v1"or "v2"
 #' @return List with akc_vector, Sigma, and Sigma_ind
 #' @keywords internal
 #' @noRd
-compute_akc_multivariate_variance_auto <- function(X, Y, IID = TRUE, version = "original") {
+compute_akc_multivariate_variance_auto <- function(X, Y, IID = TRUE, version = "v2") {
   
   if (IID) {
-    if (version == "original") {
-      return(Sigma_akc_multivariate(X, Y))
-    } else if (version == "v1") {
+    if (version == "v1") {
       return(Sigma_akc_multivariate_v1(X, Y))
     } else {  # v2
       return(Sigma_akc_multivariate_v2(X, Y))
     }
   } else {
-    if (version == "original") {
-      return(Sigma_akc_multivariate_ts(X, Y))
-    } else if (version == "v1") {
+    if (version == "v1") {
       return(Sigma_akc_multivariate_ts_v1(X, Y))
     } else {  # v2
       return(Sigma_akc_multivariate_ts_v2(X, Y))
@@ -152,7 +140,7 @@ compute_akc_multivariate_variance_auto <- function(X, Y, IID = TRUE, version = "
 #' 
 #' @param Y Numeric outcome vector
 #' @param X Numeric predictor vector or matrix
-#' @return Character: "v2" or "original"
+#' @return Character: "v2" or "binary"
 #' @keywords internal
 #' @noRd
 select_agc_kernel_version <- function(Y, X) {
@@ -177,25 +165,21 @@ select_agc_kernel_version <- function(Y, X) {
 #' @param y_rank Numeric vector of average ranks for Y
 #' @param x_rank Numeric vector of average ranks for X
 #' @param IID Logical; if TRUE uses IID variance, if FALSE uses HAC
-#' @param version Character: "v2" or "original"
+#' @param version Character: "v2" or "binary"
 #' @return List with agc, var, and var_ind
 #' @keywords internal
 #' @noRd
-compute_agc_variance_auto <- function(y_rank, x_rank, IID = TRUE, version = "original") {
+compute_agc_variance_auto <- function(y_rank, x_rank, IID = TRUE, version = "v2") {
   
   if (IID) {
     if (version == "binary") {
       return(Sigma_agc_binary(y_rank, x_rank))
-    } else if (version == "original") {
-      return(Sigma_agc(y_rank, x_rank))
     } else {  # v2
       return(Sigma_agc_v2(y_rank, x_rank))
     }
   } else {
     if (version == "binary") {
       return(Sigma_agc_ts_binary(y_rank, x_rank))
-    } else if (version == "original") {
-      return(Sigma_agc_ts(y_rank, x_rank))
     } else {  # v2
       return(Sigma_agc_ts_v2(y_rank, x_rank))
     }
@@ -207,25 +191,21 @@ compute_agc_variance_auto <- function(y_rank, x_rank, IID = TRUE, version = "ori
 #' @param y_rank Numeric vector of average ranks for Y
 #' @param xarray_ranks Matrix of ranks (predictors x n)
 #' @param IID Logical; if TRUE uses IID variance, if FALSE uses HAC
-#' @param version Character: "v2" or "original"
+#' @param version Character: "v2" or "binary"
 #' @return List with agc_vector, Sigma, and Sigma_ind
 #' @keywords internal
 #' @noRd
-compute_agc_multivariate_variance_auto <- function(y_rank, xarray_ranks, IID = TRUE, version = "original") {
+compute_agc_multivariate_variance_auto <- function(y_rank, xarray_ranks, IID = TRUE, version = "v2") {
   
   if (IID) {
     if (version == "binary") {
       return(Sigma_agc_multivariate_binary(y_rank, xarray_ranks))
-    } else if (version == "original") {
-      return(Sigma_agc_multivariate(y_rank, xarray_ranks))
     } else {  # v2
       return(Sigma_agc_multivariate_v2(y_rank, xarray_ranks))
     }
   } else {
     if (version == "binary") {
       return(Sigma_agc_multivariate_ts_binary(y_rank, xarray_ranks))
-    } else if (version == "original") {
-      return(Sigma_agc_multivariate_ts(y_rank, xarray_ranks))
     } else {  # v2
       return(Sigma_agc_multivariate_ts_v2(y_rank, xarray_ranks))
     }

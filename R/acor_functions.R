@@ -106,12 +106,24 @@ acor <- function(X, Y, method = c("akc", "agc", "cid", "cma")) {
   }
   
   # Format output
-  out <- list(
-    estimate = estimates,
-    method = method
+  out <- structure(
+      list(
+        estimate = estimates,
+        method = method
+      ),
+      class = "acor"
   )
   
   return(out)
+}
+
+
+#' @method print acor
+#' @export
+print.acor <- function(x, ...) {
+  cat("\n\t", toupper(x$method), "\n\n")
+  cat("estimate:", format(x$estimate, digits = 4), "\n\n")
+  invisible(x)
 }
 
 
@@ -121,11 +133,9 @@ acor <- function(X, Y, method = c("akc", "agc", "cid", "cma")) {
 #' @param Y Outcome variable (vector)
 #' @param method Character string specifying the method: "akc", "agc", "cid", or "cma"
 #' @param alternative Character string specifying the alternative hypothesis:
-#'   \itemize{
-#'     \item "two.sided" (default): tests if correlation differs from null value
-#'     \item "greater": tests if correlation is greater than null value
-#'     \item "less": tests if correlation is less than null value
-#'   }
+#'   * `"two.sided"` (default): tests if correlation differs from null value
+#'   * `"greater"`: tests if correlation is greater than null value
+#'   * `"less"`: tests if correlation is less than null value
 #' @param conf.level Confidence level (default 0.95)
 #' @param fisher Logical; if TRUE, uses Fisher transformation for confidence interval.
 #' @param IID Logical; if FALSE inference performed under time series assumptions and thus HAC variance estimator is computed 
@@ -338,23 +348,6 @@ acor.test <- function(X, Y,
     } else {
       CI <- c(estimates - z_alpha * se, estimates + z_alpha * se)
     }
-    
-    # Create result object (m == 1)
-    # out <- list(
-    #   statistic = test_stat,
-    #   statistic_ind = test_stat_ind,
-    #   p.value = p_value,
-    #   p.value_ind = p_value_ind,
-    #   estimate = estimates,
-    #   variance = variance,
-    #   variance_ind = variance_ind,
-    #   Fisher = fisher,
-    #   conf.int = CI,
-    #   conf.level = conf.level,
-    #   alternative = alternative,
-    #   method = paste(toupper(method), "test"),
-    #   IID = IID
-    # )
     
     ## versus htest object:
     out <- structure(list(

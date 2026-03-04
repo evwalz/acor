@@ -23,9 +23,9 @@ acor.test(
 
 \item{alternative}{Character string specifying the alternative hypothesis:
 \itemize{
-\item "two.sided" (default): tests if correlation differs from null value
-\item "greater": tests if correlation is greater than null value
-\item "less": tests if correlation is less than null value
+\item \code{"two.sided"} (default): tests if correlation differs from null value
+\item \code{"greater"}: tests if correlation is greater than null value
+\item \code{"less"}: tests if correlation is less than null value
 }}
 
 \item{conf.level}{Confidence level (default 0.95)}

@@ -43,7 +43,7 @@ K_tau_vec_original <- function(X, Y, tau_XY) {
   n <- length(X)
   result <- numeric(n)
   for (i in 1:n) {
-    result[i] <- acor:::K_tau(X[i], Y[i], X, Y, tau_XY)
+    result[i] <- K_tau(X[i], Y[i], X, Y, tau_XY)
   }
   result
 }
@@ -53,20 +53,20 @@ K_p_vec_original <- function(Y, tau_y) {
   n <- length(Y)
   result <- numeric(n)
   for (i in 1:n) {
-    result[i] <- acor:::K_p(Y[i], Y, tau_y)
+    result[i] <- K_p(Y[i], Y, tau_y)
   }
   result
 }
 
 # Vectorized original F_bar (loop-based)
 F_bar_vec_original <- function(X) {
-  sapply(X, function(x) acor:::F_bar(x, X))
+  sapply(X, function(x) F_bar(x, X))
 }
 
 # Vectorized original H_bar (loop-based)
 H_bar_vec_original <- function(X, Y) {
   n <- length(X)
-  sapply(1:n, function(i) acor:::H_bar(X[i], Y[i], X, Y))
+  sapply(1:n, function(i) H_bar(X[i], Y[i], X, Y))
 }
 
 Sigma_akc_v1_wrapper <- function(X, Y) {
@@ -75,7 +75,7 @@ Sigma_akc_v1_wrapper <- function(X, Y) {
     akc_result <- acor:::kendall_tau_sign_binary(X, Y)
   } else {
     tau_Y_result <- acor:::tau_Y_func(Y)
-    akc_result <- acor:::kendall_tau_sign(X, Y)
+    akc_result <- kendall_tau_sign(X, Y)
   }
   tau_Y <- tau_Y_result$expectation
   p_Y <- tau_Y_result$p_tie_y
@@ -92,7 +92,7 @@ Sigma_akc_v2_wrapper <- function(X, Y) {
     akc_result <- acor:::kendall_tau_sign_binary(X, Y)
   } else {
     tau_Y_result <- acor:::tau_Y_func(Y)
-    akc_result <- acor:::kendall_tau_sign(X, Y)
+    akc_result <- kendall_tau_sign(X, Y)
   }
   tau_Y <- tau_Y_result$expectation
   p_Y <- tau_Y_result$p_tie_y
@@ -125,7 +125,7 @@ test_that("F_bar_vec_v1 produces identical results to original", {
     X <- tc$gen_X(tc$n)
 
     F_orig <- F_bar_vec_original(X)
-    F_v1 <- acor:::F_bar_vec_v1(X)
+    F_v1 <- acor:::F_bar_vec(X)
 
     expect_equal(F_v1, F_orig, tolerance = 1e-10,
                  info = sprintf("%s: F_bar_vec_v1 should match original", tc$name))
@@ -158,8 +158,8 @@ test_that("K_p_vec_v1 and K_p_vec_v2 produce identical results to original", {
     tau_Y <- tau_Y_result$expectation
 
     K_p_orig <- K_p_vec_original(Y, tau_Y)
-    K_p_v1 <- acor:::K_p_vec_v1(Y, tau_Y)
-    K_p_v2 <- acor:::K_p_vec_v2(Y, tau_Y)
+    K_p_v1 <- acor:::K_p_vec(Y, tau_Y)
+    K_p_v2 <- acor:::K_p_vec(Y, tau_Y)
 
     expect_equal(K_p_v1, K_p_orig, tolerance = 1e-10,
                  info = sprintf("%s: K_p_vec_v1 should match original", tc$name))
@@ -238,7 +238,7 @@ test_that("K_tau_vec_v1 and K_tau_vec_v2 produce identical results to original",
     Y <- tc$gen_Y(tc$n, X)
 
     # Use kendall_tau_sign to get tau_XY
-    akc_result <- acor:::kendall_tau_sign(X, Y)
+    akc_result <- kendall_tau_sign(X, Y)
     tau_XY <- akc_result$expectation
 
     K_tau_orig <- K_tau_vec_original(X, Y, tau_XY)
@@ -276,7 +276,7 @@ test_that("Sigma_akc_multivariate_v1 and _v2 produce identical results to origin
       Y <- 0.5 * rowMeans(X) + rnorm(tc$n, sd = 0.8)
     }
 
-    res_orig <- acor:::Sigma_akc_multivariate(X, Y)
+    res_orig <- Sigma_akc_multivariate(X, Y)
     res_v1 <- acor:::Sigma_akc_multivariate_v1(X, Y)
     res_v2 <- acor:::Sigma_akc_multivariate_v2(X, Y)
 
@@ -361,7 +361,7 @@ test_that("Runtime benchmark: K_tau - Original vs V1 vs V2", {
     X <- rnorm(n) + rnorm(n, sd = 0.0001)
     Y <- 0.5 * X + rnorm(n, sd = 0.8) + rnorm(n, sd = 0.0001)
 
-    akc_result <- acor:::kendall_tau_sign(X, Y)
+    akc_result <- kendall_tau_sign(X, Y)
     tau_XY <- akc_result$expectation
 
     time_orig <- time_execution(quote(K_tau_vec_original(X, Y, tau_XY)),
@@ -431,7 +431,7 @@ test_that("Runtime benchmark: K_tau - Original vs V1 vs V2", {
     X <- sample(1:10, n, replace = TRUE)
     Y <- sample(1:10, n, replace = TRUE)
 
-    akc_result <- acor:::kendall_tau_sign(X, Y)
+    akc_result <- kendall_tau_sign(X, Y)
     tau_XY <- akc_result$expectation
 
     time_orig <- time_execution(quote(K_tau_vec_original(X, Y, tau_XY)),
@@ -484,7 +484,7 @@ test_that("Runtime benchmark: Sigma_akc_multivariate - Original vs V1 vs V2", {
     X <- matrix(rnorm(n * m), nrow = n, ncol = m)
     Y <- 0.5 * rowMeans(X) + rnorm(n, sd = 0.8)
 
-    time_orig <- time_execution(quote(acor:::Sigma_akc_multivariate(X, Y)),
+    time_orig <- time_execution(quote(Sigma_akc_multivariate(X, Y)),
                                 replications = n_replications)$median
     time_v1 <- time_execution(quote(acor:::Sigma_akc_multivariate_v1(X, Y)),
                               replications = n_replications)$median
@@ -516,7 +516,7 @@ test_that("Runtime benchmark: Sigma_akc_multivariate - Original vs V1 vs V2", {
     X <- matrix(rnorm(n * m), nrow = n, ncol = m)
     Y <- rbinom(n, 1, 0.6)
 
-    time_orig <- time_execution(quote(acor:::Sigma_akc_multivariate(X, Y)),
+    time_orig <- time_execution(quote(Sigma_akc_multivariate(X, Y)),
                                 replications = n_replications)$median
     time_v1 <- time_execution(quote(acor:::Sigma_akc_multivariate_v1(X, Y)),
                               replications = n_replications)$median
@@ -678,7 +678,7 @@ test_that("V1 vs V2 comparison: Y with 3 distinct values and large n", {
   X <- rnorm(n)  # continuous X, no ties
   Y <- sample(1:3, n, replace = TRUE)  # Y with 3 distinct values
 
-  akc_result <- acor:::kendall_tau_sign(X, Y)
+  akc_result <- kendall_tau_sign(X, Y)
   tau_XY <- akc_result$expectation
 
   cat(sprintf("n = %d, unique(Y) = %d, unique(X) = %d\n\n", n, length(unique(Y)), length(unique(X))))
@@ -731,7 +731,7 @@ test_that("Computational complexity analysis", {
     X <- rnorm(n) + rnorm(n, sd = 0.0001)
     Y <- rnorm(n) + rnorm(n, sd = 0.0001)
 
-    akc_result <- acor:::kendall_tau_sign(X, Y)
+    akc_result <- kendall_tau_sign(X, Y)
     tau_XY <- akc_result$expectation
 
     time_orig <- time_execution(quote(K_tau_vec_original(X, Y, tau_XY)),
@@ -821,7 +821,7 @@ test_that("Runtime benchmark: Sigma_akc vs Sigma_akc_v1 vs Sigma_akc_v2", {
 
     # Only run original for small n (it's slow)
     if (n <= 1000) {
-      time_orig <- time_execution(quote(acor:::Sigma_akc(X, Y)),
+      time_orig <- time_execution(quote(Sigma_akc(X, Y)),
                                   replications = n_replications)$median
     } else {
       time_orig <- NA
@@ -874,7 +874,7 @@ test_that("Runtime benchmark: Sigma_akc vs Sigma_akc_v1 vs Sigma_akc_v2", {
 
       # Only run original for small n
       if (n <= 1000) {
-        time_orig <- time_execution(quote(acor:::Sigma_akc(X, Y)),
+        time_orig <- time_execution(quote(Sigma_akc(X, Y)),
                                     replications = n_replications)$median
       } else {
         time_orig <- NA
@@ -923,7 +923,7 @@ test_that("Runtime benchmark: Sigma_akc vs Sigma_akc_v1 vs Sigma_akc_v2", {
 
     # Only run original for small n
     if (n <= 1000) {
-      time_orig <- time_execution(quote(acor:::Sigma_akc(X, Y)),
+      time_orig <- time_execution(quote(Sigma_akc(X, Y)),
                                   replications = n_replications)$median
     } else {
       time_orig <- NA
@@ -1023,7 +1023,7 @@ test_that("Runtime benchmark: Sigma_akc_multivariate vs _v1 vs _v2", {
 
     # Only run original for small n
     if (n <= 500) {
-      time_orig <- time_execution(quote(acor:::Sigma_akc_multivariate(X, Y)),
+      time_orig <- time_execution(quote(Sigma_akc_multivariate(X, Y)),
                                   replications = n_replications)$median
     } else {
       time_orig <- NA
@@ -1076,7 +1076,7 @@ test_that("Runtime benchmark: Sigma_akc_multivariate vs _v1 vs _v2", {
 
       # Only run original for small n
       if (n <= 500) {
-        time_orig <- time_execution(quote(acor:::Sigma_akc_multivariate(X, Y)),
+        time_orig <- time_execution(quote(Sigma_akc_multivariate(X, Y)),
                                     replications = n_replications)$median
       } else {
         time_orig <- NA
@@ -1125,7 +1125,7 @@ test_that("Runtime benchmark: Sigma_akc_multivariate vs _v1 vs _v2", {
 
     # Only run original for small n
     if (n <= 500) {
-      time_orig <- time_execution(quote(acor:::Sigma_akc_multivariate(X, Y)),
+      time_orig <- time_execution(quote(Sigma_akc_multivariate(X, Y)),
                                   replications = n_replications)$median
     } else {
       time_orig <- NA

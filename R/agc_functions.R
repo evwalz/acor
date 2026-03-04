@@ -1,6 +1,6 @@
 # Asymmetric Grade Correlation (AGC) Functions
 # Refactored to eliminate duplicated variance/HAC logic via shared helpers.
-# Three kernel implementations: original (kernel_ties_optim2), v2 (Fenwick tree),
+# Three kernel implementations: v2 (Fenwick tree),
 # binary (specialized for binary Y).
 # All Sigma_* functions return both main variance and independence variance.
 
@@ -478,88 +478,6 @@ agc_build_hac_covariance <- function(kps, k_zeta, rhos, zeta_3Y, sigma_zeta, N, 
 }
 
 
-# ============================================================================
-# KERNEL: original (kernel_ties_optim2)
-# ============================================================================
-
-#' Optimized kernel computation with ties (vectorized version)
-#' @keywords internal
-#' @noRd
-kernel_ties_optim2 <- function(x_rank_sort, y_rank_sort, rho,
-                               y_rank_unique, y_num, pos_y, ix_y,
-                               x_rank_unique) {
-  N <- length(x_rank_sort)
-  R <- length(x_rank_unique)
-  M <- length(y_rank_unique)
-  
-  G_x_unique <- (x_rank_unique - 0.5) / N
-  G_y <- (y_rank_unique - 0.5) / N
-  
-  x_rank_indices <- match(x_rank_sort, x_rank_unique)
-  G_x <- G_x_unique[x_rank_indices]
-  
-  # Vectorized sign matrices
-  sign_x <- outer(x_rank_unique, x_rank_sort, function(a, b) sign(b - a))
-  sign_y <- outer(y_rank_unique, y_rank_sort, function(a, b) sign(b - a))
-  mean_sign_x <- (sign_x %*% t(sign_y)) / N
-  
-  mean_sign_x_indexed <- mean_sign_x[x_rank_indices, , drop = FALSE]
-  
-  all_exp <- mean_sign_x_indexed +
-    2 * outer(G_x, rep(1, M)) +
-    outer(rep(1, N), 2 * G_y) - 1
-  
-  # Vectorized g_1
-  col_sums <- colSums(all_exp)
-  g_1 <- numeric(N)
-  for (i in 1:M) {
-    start_idx <- pos_y[i] + 1
-    end_idx <- pos_y[i + 1]
-    g_1[start_idx:end_idx] <- col_sums[i] / N
-  }
-  
-  # Vectorized g_2
-  g_2 <- (all_exp %*% y_num) / N
-  
-  g_1 <- g_1 / 4
-  g_2 <- as.vector(g_2) / 4
-  
-  G_y_full <- (y_rank_sort - 0.5) / N
-  
-  k_p <- 4 * (g_1 + g_2 + G_x * G_y_full - G_y_full - G_x) + 1 - rho
-  
-  # Reverse sorting
-  rev_order <- order(ix_y)
-  k_p[rev_order]
-}
-
-#' Prepare kernel_ties_optim2 arguments from ranks
-#' @keywords internal
-#' @noRd
-prepare_original_kernel_args <- function(y_rank, x_rank) {
-  y_rank_unique <- sort(unique(y_rank))
-  y_num <- as.numeric(table(factor(y_rank, levels = y_rank_unique)))
-  pos_y <- c(0, cumsum(y_num))
-  ix_y <- order(y_rank)
-  y_rank_sort <- y_rank[ix_y]
-  x_rank_sort <- x_rank[ix_y]
-  x_rank_unique <- sort(unique(x_rank_sort))
-  
-  list(x_rank_sort = x_rank_sort, y_rank_sort = y_rank_sort,
-       y_rank_unique = y_rank_unique, y_num = y_num, pos_y = pos_y,
-       ix_y = ix_y, x_rank_unique = x_rank_unique)
-}
-
-#' Compute kernel using original method
-#' @keywords internal
-#' @noRd
-compute_kp_original <- function(y_rank, x_rank, rho) {
-  args <- prepare_original_kernel_args(y_rank, x_rank)
-  kernel_ties_optim2(args$x_rank_sort, args$y_rank_sort, rho,
-                     args$y_rank_unique, args$y_num, args$pos_y,
-                     args$ix_y, args$x_rank_unique)
-}
-
 
 # ============================================================================
 # KERNEL: Binary Y specialization -- O(n log n)
@@ -747,12 +665,6 @@ agc_sigma_multivariate_hac <- function(y_rank, xarray_ranks, kernel_fn) {
 
 #' @keywords internal
 #' @noRd
-kfn_original <- function(y_rank, x_rank, rho) {
-  compute_kp_original(y_rank, x_rank, rho)
-}
-
-#' @keywords internal
-#' @noRd
 kfn_v2 <- function(y_rank, x_rank, rho) {
   kernel_agc_v2_cpp(x_rank, y_rank, rho)
 }
@@ -761,39 +673,6 @@ kfn_v2 <- function(y_rank, x_rank, rho) {
 #' @noRd
 kfn_binary <- function(y_rank, x_rank, rho) {
   kernel_agc_binary(x_rank, y_rank, rho)
-}
-
-
-# ============================================================================
-# PUBLIC SIGMA FUNCTIONS (original kernel)
-# ============================================================================
-
-#' AGC variance, univariate IID (original kernel)
-#' @keywords internal
-#' @noRd
-Sigma_agc <- function(y_rank, x_rank) {
-  agc_sigma_univariate_iid(y_rank, x_rank, kfn_original)
-}
-
-#' AGC variance, univariate HAC (original kernel)
-#' @keywords internal
-#' @noRd
-Sigma_agc_ts <- function(y_rank, x_rank) {
-  agc_sigma_univariate_hac(y_rank, x_rank, kfn_original)
-}
-
-#' AGC covariance, multivariate IID (original kernel)
-#' @keywords internal
-#' @noRd
-Sigma_agc_multivariate <- function(y_rank, xarray_ranks) {
-  agc_sigma_multivariate_iid(y_rank, xarray_ranks, kfn_original)
-}
-
-#' AGC covariance, multivariate HAC (original kernel)
-#' @keywords internal
-#' @noRd
-Sigma_agc_multivariate_ts <- function(y_rank, xarray_ranks) {
-  agc_sigma_multivariate_hac(y_rank, xarray_ranks, kfn_original)
 }
 
 

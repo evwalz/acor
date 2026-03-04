@@ -25,13 +25,13 @@ TOL <- 1e-10
 run_agc_uni <- function(y_rank, x_rank, version, IID = TRUE) {
   if (IID) {
     if (version == "original") {
-      acor:::Sigma_agc(y_rank, x_rank)
+      Sigma_agc(y_rank, x_rank)
     } else {  # v2
       acor:::Sigma_agc_v2(y_rank, x_rank)
     }
   } else {
     if (version == "original") {
-      acor:::Sigma_agc_ts(y_rank, x_rank)
+      Sigma_agc_ts(y_rank, x_rank)
     } else {  # v2
       acor:::Sigma_agc_ts_v2(y_rank, x_rank)
     }
@@ -42,13 +42,13 @@ run_agc_uni <- function(y_rank, x_rank, version, IID = TRUE) {
 run_agc_mv <- function(y_rank, xarray_ranks, version, IID = TRUE) {
   if (IID) {
     if (version == "original") {
-      acor:::Sigma_agc_multivariate(y_rank, xarray_ranks)
+      Sigma_agc_multivariate(y_rank, xarray_ranks)
     } else {  # v2
       acor:::Sigma_agc_multivariate_v2(y_rank, xarray_ranks)
     }
   } else {
     if (version == "original") {
-      acor:::Sigma_agc_multivariate_ts(y_rank, xarray_ranks)
+      Sigma_agc_multivariate_ts(y_rank, xarray_ranks)
     } else {  # v2
       acor:::Sigma_agc_multivariate_ts_v2(y_rank, xarray_ranks)
     }
@@ -830,7 +830,7 @@ test_that("kernel_agc_v2_cpp produces identical results to original kernel", {
     result <- acor:::comp_rho_agc(y_rank, x_rank)
     rho <- result$rho
     
-    kp_original <- acor:::compute_kp_original(y_rank, x_rank, rho)
+    kp_original <- compute_kp_original(y_rank, x_rank, rho)
     kp_v2 <- acor:::kernel_agc_v2_cpp(x_rank, y_rank, rho)
     
     expect_equal(kp_v2, kp_original, tolerance = 1e-10,
@@ -870,7 +870,7 @@ test_that("kernel_agc_binary produces identical results to original kernel", {
     result <- acor:::comp_rho_agc(y_rank, x_rank)
     rho <- result$rho
     
-    kp_original <- acor:::compute_kp_original(y_rank, x_rank, rho)
+    kp_original <- compute_kp_original(y_rank, x_rank, rho)
     kp_binary <- acor:::kernel_agc_binary(x_rank, y_rank, rho)
     
     expect_equal(kp_binary, kp_original, tolerance = 1e-10,
@@ -906,7 +906,7 @@ test_that("Sigma_agc_v2 and Sigma_agc_binary match Sigma_agc (univariate IID)", 
     y_rank <- rank(Y, ties.method = "average")
     x_rank <- rank(X, ties.method = "average")
     
-    res_orig <- acor:::Sigma_agc(y_rank, x_rank)
+    res_orig <- Sigma_agc(y_rank, x_rank)
     res_v2 <- acor:::Sigma_agc_v2(y_rank, x_rank)
     
     expect_equal(res_v2$agc, res_orig$agc, tolerance = 1e-10,
@@ -948,7 +948,7 @@ test_that("Sigma_agc_ts_v2 and Sigma_agc_ts_binary match Sigma_agc_ts (HAC)", {
     y_rank <- rank(Y, ties.method = "average")
     x_rank <- rank(X, ties.method = "average")
     
-    res_orig <- acor:::Sigma_agc_ts(y_rank, x_rank)
+    res_orig <- Sigma_agc_ts(y_rank, x_rank)
     res_v2 <- acor:::Sigma_agc_ts_v2(y_rank, x_rank)
     
     expect_equal(res_v2$agc, res_orig$agc, tolerance = 1e-10,
@@ -994,7 +994,7 @@ test_that("Sigma_agc_multivariate_v2 matches original (multivariate IID)", {
       xarray_ranks[j, ] <- rank(X[, j], ties.method = "average")
     }
     
-    res_orig <- acor:::Sigma_agc_multivariate(y_rank, xarray_ranks)
+    res_orig <- Sigma_agc_multivariate(y_rank, xarray_ranks)
     res_v2 <- acor:::Sigma_agc_multivariate_v2(y_rank, xarray_ranks)
     
     expect_equal(res_v2$agc_vector, res_orig$agc_vector, tolerance = 1e-10,
@@ -1038,7 +1038,7 @@ test_that("Sigma_agc_multivariate_ts_v2 matches original (multivariate HAC)", {
       xarray_ranks[j, ] <- rank(X[, j], ties.method = "average")
     }
     
-    res_orig <- acor:::Sigma_agc_multivariate_ts(y_rank, xarray_ranks)
+    res_orig <- Sigma_agc_multivariate_ts(y_rank, xarray_ranks)
     res_v2 <- acor:::Sigma_agc_multivariate_ts_v2(y_rank, xarray_ranks)
     
     expect_equal(res_v2$agc_vector, res_orig$agc_vector, tolerance = 1e-10,
@@ -1089,7 +1089,7 @@ test_that("Runtime benchmark: AGC kernel — Original vs V2 vs Binary", {
     rho <- acor:::comp_rho_agc(y_rank, x_rank)$rho
     
     time_orig <- time_execution(
-      quote(acor:::compute_kp_original(y_rank, x_rank, rho)),
+      quote(compute_kp_original(y_rank, x_rank, rho)),
       replications = n_replications)$median
     time_v2 <- time_execution(
       quote(acor:::kernel_agc_v2_cpp(x_rank, y_rank, rho)),
@@ -1123,7 +1123,7 @@ test_that("Runtime benchmark: AGC kernel — Original vs V2 vs Binary", {
     rho <- acor:::comp_rho_agc(y_rank, x_rank)$rho
     
     time_orig <- time_execution(
-      quote(acor:::compute_kp_original(y_rank, x_rank, rho)),
+      quote(compute_kp_original(y_rank, x_rank, rho)),
       replications = n_replications)$median
     time_v2 <- time_execution(
       quote(acor:::kernel_agc_v2_cpp(x_rank, y_rank, rho)),
@@ -1160,7 +1160,7 @@ test_that("Runtime benchmark: AGC kernel — Original vs V2 vs Binary", {
     rho <- acor:::comp_rho_agc(y_rank, x_rank)$rho
     
     time_orig <- time_execution(
-      quote(acor:::compute_kp_original(y_rank, x_rank, rho)),
+      quote(compute_kp_original(y_rank, x_rank, rho)),
       replications = n_replications)$median
     time_v2 <- time_execution(
       quote(acor:::kernel_agc_v2_cpp(x_rank, y_rank, rho)),
@@ -1192,7 +1192,7 @@ test_that("Runtime benchmark: AGC kernel — Original vs V2 vs Binary", {
     x_rank <- rank(X, ties.method = "average")
     
     time_orig <- time_execution(
-      quote(acor:::Sigma_agc(y_rank, x_rank)),
+      quote(Sigma_agc(y_rank, x_rank)),
       replications = n_replications)$median
     time_v2 <- time_execution(
       quote(acor:::Sigma_agc_v2(y_rank, x_rank)),
