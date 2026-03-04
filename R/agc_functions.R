@@ -356,7 +356,6 @@ ind_covariance_agc_hac <- function(xarray_ranks, y_rank, N, zeta_3Y, b) {
 
 
 
-
 # ============================================================================
 # IID COVARIANCE MATRIX BUILDER (shared by multivariate IID functions)
 # ============================================================================

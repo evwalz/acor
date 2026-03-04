@@ -206,22 +206,22 @@ ind_variance_akc_iid <- function(X, Y, p_Y) {
 #' @noRd
 ind_variance_akc_hac <- function(X, Y, p_Y) {
   N <- length(Y)
-  
+
   b <- floor(2 * N^(1 / 3))
   h_vec <- 1:(N - 1)
   w <- pmax(1 - abs(h_vec) / (b + 1), 0)
-  
+
   x_grade_centered <- (rank(X, ties.method = "average") - 0.5) / N - 0.5
   y_grade_centered <- (rank(Y, ties.method = "average") - 0.5) / N - 0.5
-  
+
   x_autoc <- stats::acf(x_grade_centered, plot = FALSE, type = "covariance",
                         demean = FALSE, lag.max = N - 1)$acf
   y_autoc <- stats::acf(y_grade_centered, plot = FALSE, type = "covariance",
                         demean = FALSE, lag.max = N - 1)$acf
-  
+
   tau_ind_lrv <- 64 * sum(x_autoc[1] * y_autoc[1],
                           2 * (w * x_autoc[-1] * y_autoc[-1]))
-  
+
   tau_ind_lrv / (1 - p_Y)^2
 }
 
@@ -280,41 +280,41 @@ ind_covariance_akc_iid <- function(X, Y, p_Y) {
 ind_covariance_akc_hac <- function(X, Y, p_Y) {
   N <- length(Y)
   m <- ncol(X)
-  
+
   b <- floor(2 * N^(1 / 3))
   h_vec <- 1:(N - 1)
   w <- pmax(1 - abs(h_vec) / (b + 1), 0)
-  
+
   x_grades_centered <- matrix(0, nrow = N, ncol = m)
   for (k in seq_len(m)) {
     x_grades_centered[, k] <- (rank(X[, k], ties.method = "average") - 0.5) / N - 0.5
   }
   y_grade_centered <- (rank(Y, ties.method = "average") - 0.5) / N - 0.5
-  
+
   y_autoc <- stats::acf(y_grade_centered, plot = FALSE, type = "covariance",
                         demean = FALSE, lag.max = N - 1)$acf
-  
+
   Sigma_ind <- matrix(0, nrow = m, ncol = m)
-  
+
   for (k in seq_len(m)) {
     for (l in k:m) {
       x_grade_k <- x_grades_centered[, k]
       x_grade_l <- x_grades_centered[, l]
-      
+
       xcov_0 <- mean(x_grade_k * x_grade_l)
       hac_sum_xy <- xcov_0 * y_autoc[1]
-      
+
       for (h in seq_len(min(b, N - 1))) {
         xcov_h <- mean(x_grade_k[1:(N - h)] * x_grade_l[(h + 1):N] +
                          x_grade_k[(h + 1):N] * x_grade_l[1:(N - h)]) / 2
         hac_sum_xy <- hac_sum_xy + 2 * w[h] * xcov_h * y_autoc[h + 1]
       }
-      
+
       Sigma_ind[k, l] <- 64 * hac_sum_xy / (1 - p_Y)^2
       if (k != l) Sigma_ind[l, k] <- Sigma_ind[k, l]
     }
   }
-  
+
   Sigma_ind
 }
 
