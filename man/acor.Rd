@@ -2,16 +2,26 @@
 % Please edit documentation in R/acor_functions.R
 \name{acor}
 \alias{acor}
-\title{Compute asymmetric Correlation (AKC, AGC, CID, or CMA)}
+\title{Compute Correlation Coefficients}
 \usage{
-acor(X, Y, method = c("akc", "agc", "cid", "cma"))
+acor(
+  X,
+  Y,
+  method = c("pearson", "akc", "agc", "cid", "cma", "tau_a", "tau_b", "tau_b_mod",
+    "gamma", "rho_a", "rho_b")
+)
 }
 \arguments{
 \item{X}{Predictor variable (vector or matrix for multiple predictors)}
 
 \item{Y}{Outcome variable (vector)}
 
-\item{method}{Character string specifying the method: "akc", "agc", "cid", or "cma"}
+\item{method}{Character string specifying the method:
+"akc", "agc", "cid", "cma",
+"tau_a", "tau_b", "tau_b_mod",
+"gamma",
+"rho_a", "rho_b",
+"pearson"}
 }
 \value{
 A list containing:
@@ -19,19 +29,42 @@ A list containing:
 \item{method}{The method used}
 }
 \description{
-Compute asymmetric Correlation (AKC, AGC, CID, or CMA)
+Compute Correlation Coefficients
 }
 \details{
-Methods and their relationships:
+Asymmetric measures (directional, Y is the outcome):
 \itemize{
-\item CID: Concordance-Discordance Index (base measure from Kendall framework)
 \item AKC: Asymmetric Kendall Correlation = 2*CID - 1
-\item CMA: Coefficient of monotone Association
-\item AGC: Asymmetric Grade correlation = 2*CMA - 1
+\item CID: Concordance-Discordance Index (base measure from Kendall framework)
+\item AGC: Asymmetric Grade Correlation = 2*CMA - 1
+\item CMA: Coefficient of Monotone Association
 }
 
-CID and CMA range from 0 to 1 (with 0.5 = independence)
-AKC and AGC range from -1 to 1 (with 0 = independence)
+Kendall rank correlations (symmetric):
+\itemize{
+\item tau_a: Kendall's tau-a (no tie correction)
+\item tau_b: Kendall's tau-b (pair-based tie correction)
+\item tau_b_mod: Modified tau-b (triple-based tie correction)
+}
+
+Goodman-Kruskal measure (symmetric):
+\itemize{
+\item gamma: Goodman-Kruskal gamma (concordant-discordant pairs only)
+}
+
+Spearman rank correlations (symmetric):
+\itemize{
+\item rho_a: Spearman's rho without tie correction
+\item rho_b: Spearman's rho with tie correction
+}
+
+Pearson correlation (symmetric):
+\itemize{
+\item pearson: Pearson product-moment correlation
+}
+
+CID and CMA range from 0 to 1 (with 0.5 = independence).
+All other measures range from -1 to 1 (with 0 = independence).
 
 For multiple predictors, X should be a matrix with predictors as columns
 }

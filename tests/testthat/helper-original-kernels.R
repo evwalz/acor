@@ -407,3 +407,28 @@ Sigma_agc_multivariate_ts <- function(y_rank, xarray_ranks) {
   agc_sigma_multivariate_hac(y_rank, xarray_ranks, kfn_original)
 }
 
+
+
+Tau_LRV <- function(X, Y, kendall) {
+  n <- length(X)
+  b <- floor(2 * n^(1/3))
+  h <- 1:(n-1)
+  w <- pmax(1 - abs(h) / (b + 1), 0)
+  G_XY <- Vectorize(function(x_val, y_val) (mean(X <= x_val & Y <= y_val) + mean(X <= x_val & Y < y_val) + mean(X < x_val & Y <= y_val) + mean(X < x_val & Y < y_val)) / 4)
+  G_X <- Vectorize(function(x_val) (mean(X < x_val) + mean(X <= x_val)) / 2)
+  G_Y <- Vectorize(function(y_val) (mean(Y < y_val) + mean(Y <= y_val)) / 2)
+  k_XY <- 4 * G_XY(X, Y) - 2 * (G_X(X) + G_Y(Y)) + 1 - kendall
+  k_XY_autoc <- stats::acf(k_XY, plot = FALSE, type = "covariance", demean = FALSE, lag.max = n - 1)$acf
+  4 * sum(k_XY_autoc[1], 2 * (w * k_XY_autoc[-1]))
+}
+
+Tau_ind_LRV <- function(X, Y) {
+  n <- length(X)
+  b <- floor(2 * n^(1/3))
+  h <- 1:(n-1)
+  w <- pmax(1 - abs(h) / (b + 1), 0)
+  x_autoc <- stats::acf((rank(X) - 0.5) / n - 0.5, plot = FALSE, type = "covariance", demean = FALSE, lag.max = n - 1)$acf
+  y_autoc <- stats::acf((rank(Y) - 0.5) / n - 0.5, plot = FALSE, type = "covariance", demean = FALSE, lag.max = n - 1)$acf
+  64 * sum(x_autoc[1] * y_autoc[1], 2 * (w * x_autoc[-1] * y_autoc[-1]))
+}
+

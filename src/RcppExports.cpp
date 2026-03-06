@@ -22,6 +22,54 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// kendall_tau_a
+double kendall_tau_a(NumericVector X, NumericVector Y);
+RcppExport SEXP _acor_kendall_tau_a(SEXP XSEXP, SEXP YSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type X(XSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type Y(YSEXP);
+    rcpp_result_gen = Rcpp::wrap(kendall_tau_a(X, Y));
+    return rcpp_result_gen;
+END_RCPP
+}
+// kendall_tau_b
+double kendall_tau_b(NumericVector X, NumericVector Y);
+RcppExport SEXP _acor_kendall_tau_b(SEXP XSEXP, SEXP YSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type X(XSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type Y(YSEXP);
+    rcpp_result_gen = Rcpp::wrap(kendall_tau_b(X, Y));
+    return rcpp_result_gen;
+END_RCPP
+}
+// goodman_kruskal_gamma
+double goodman_kruskal_gamma(NumericVector X, NumericVector Y);
+RcppExport SEXP _acor_goodman_kruskal_gamma(SEXP XSEXP, SEXP YSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type X(XSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type Y(YSEXP);
+    rcpp_result_gen = Rcpp::wrap(goodman_kruskal_gamma(X, Y));
+    return rcpp_result_gen;
+END_RCPP
+}
+// kendall_tau_b_mod
+double kendall_tau_b_mod(NumericVector X, NumericVector Y);
+RcppExport SEXP _acor_kendall_tau_b_mod(SEXP XSEXP, SEXP YSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type X(XSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type Y(YSEXP);
+    rcpp_result_gen = Rcpp::wrap(kendall_tau_b_mod(X, Y));
+    return rcpp_result_gen;
+END_RCPP
+}
 // H_bar_vec_v2_cpp
 NumericVector H_bar_vec_v2_cpp(NumericVector X, NumericVector Y);
 RcppExport SEXP _acor_H_bar_vec_v2_cpp(SEXP XSEXP, SEXP YSEXP) {
@@ -50,6 +98,10 @@ END_RCPP
 
 static const R_CallMethodDef CallEntries[] = {
     {"_acor_kendall_tau_sign_cpp", (DL_FUNC) &_acor_kendall_tau_sign_cpp, 2},
+    {"_acor_kendall_tau_a", (DL_FUNC) &_acor_kendall_tau_a, 2},
+    {"_acor_kendall_tau_b", (DL_FUNC) &_acor_kendall_tau_b, 2},
+    {"_acor_goodman_kruskal_gamma", (DL_FUNC) &_acor_goodman_kruskal_gamma, 2},
+    {"_acor_kendall_tau_b_mod", (DL_FUNC) &_acor_kendall_tau_b_mod, 2},
     {"_acor_H_bar_vec_v2_cpp", (DL_FUNC) &_acor_H_bar_vec_v2_cpp, 2},
     {"_acor_kernel_agc_v2_cpp", (DL_FUNC) &_acor_kernel_agc_v2_cpp, 3},
     {NULL, NULL, 0}

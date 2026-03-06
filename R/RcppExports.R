@@ -5,6 +5,22 @@ kendall_tau_sign_cpp <- function(X, Y) {
     .Call(`_acor_kendall_tau_sign_cpp`, X, Y)
 }
 
+kendall_tau_a <- function(X, Y) {
+    .Call(`_acor_kendall_tau_a`, X, Y)
+}
+
+kendall_tau_b <- function(X, Y) {
+    .Call(`_acor_kendall_tau_b`, X, Y)
+}
+
+goodman_kruskal_gamma <- function(X, Y) {
+    .Call(`_acor_goodman_kruskal_gamma`, X, Y)
+}
+
+kendall_tau_b_mod <- function(X, Y) {
+    .Call(`_acor_kendall_tau_b_mod`, X, Y)
+}
+
 H_bar_vec_v2_cpp <- function(X, Y) {
     .Call(`_acor_H_bar_vec_v2_cpp`, X, Y)
 }

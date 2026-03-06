@@ -1150,6 +1150,8 @@ test_that("Runtime benchmark: AGC kernel — Original vs V2 vs Binary", {
   cat(paste(rep("-", 50), collapse = ""))
   cat("\n")
   
+  sample_sizes <- c(500, 1000, 2000, 5000, 8000, 10000, 12000)
+  
   for (n in sample_sizes) {
     set.seed(9900 + n)
     X <- sample(1:5, n, replace = TRUE)

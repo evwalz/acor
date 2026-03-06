@@ -7,7 +7,7 @@
 acor.test(
   X,
   Y,
-  method = c("akc", "agc", "cid", "cma"),
+  method = c("akc", "agc", "cid", "cma", "tau_a"),
   alternative = c("two.sided", "less", "greater"),
   conf.level = 0.95,
   fisher = FALSE,

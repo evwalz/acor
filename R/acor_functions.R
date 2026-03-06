@@ -4,25 +4,45 @@
 #
 # Internal helper functions are in acor_internal.R
 
-#' Compute asymmetric Correlation (AKC, AGC, CID, or CMA)
+#' Compute Correlation Coefficients
 #' 
 #' @param X Predictor variable (vector or matrix for multiple predictors)
 #' @param Y Outcome variable (vector)
-#' @param method Character string specifying the method: "akc", "agc", "cid", or "cma"
-#' 
+#' @param method Character string specifying the method:
+#'   "akc", "agc", "cid", "cma",
+#'   "tau_a", "tau_b", "tau_b_mod",
+#'   "gamma",
+#'   "rho_a", "rho_b",
+#'   "pearson"
+#'   
 #' @return A list containing:
 #'   \item{estimate}{Vector of correlation estimates}
 #'   \item{method}{The method used}
 #'   
 #' @details
-#' Methods and their relationships:
-#' - CID: Concordance-Discordance Index (base measure from Kendall framework)
-#' - AKC: Asymmetric Kendall Correlation = 2*CID - 1
-#' - CMA: Coefficient of monotone Association
-#' - AGC: Asymmetric Grade correlation = 2*CMA - 1
+#' Asymmetric measures (directional, Y is the outcome):
+#'   - AKC: Asymmetric Kendall Correlation = 2*CID - 1
+#'   - CID: Concordance-Discordance Index (base measure from Kendall framework)
+#'   - AGC: Asymmetric Grade Correlation = 2*CMA - 1
+#'   - CMA: Coefficient of Monotone Association
 #' 
-#' CID and CMA range from 0 to 1 (with 0.5 = independence)
-#' AKC and AGC range from -1 to 1 (with 0 = independence)
+#' Kendall rank correlations (symmetric):
+#'   - tau_a: Kendall's tau-a (no tie correction)
+#'   - tau_b: Kendall's tau-b (pair-based tie correction)
+#'   - tau_b_mod: Modified tau-b (triple-based tie correction)
+#' 
+#' Goodman-Kruskal measure (symmetric):
+#'   - gamma: Goodman-Kruskal gamma (concordant-discordant pairs only)
+#' 
+#' Spearman rank correlations (symmetric):
+#'   - rho_a: Spearman's rho without tie correction
+#'   - rho_b: Spearman's rho with tie correction
+#' 
+#' Pearson correlation (symmetric):
+#'   - pearson: Pearson product-moment correlation
+#' 
+#' CID and CMA range from 0 to 1 (with 0.5 = independence).
+#' All other measures range from -1 to 1 (with 0 = independence).
 #' 
 #' For multiple predictors, X should be a matrix with predictors as columns
 #' 
@@ -39,7 +59,11 @@
 #' result <- acor(X, y, method = "agc")
 #' 
 #' @export
-acor <- function(X, Y, method = c("akc", "agc", "cid", "cma")) {
+acor <- function(X, Y, method = c("pearson", "akc", "agc", "cid", "cma",
+                                  "tau_a", "tau_b", "tau_b_mod",
+                                  "gamma",
+                                  "rho_a", "rho_b"
+                                  )) {
   method <- match.arg(method)
   
   validated <- validate_acor_inputs(X, Y)
@@ -48,73 +72,34 @@ acor <- function(X, Y, method = c("akc", "agc", "cid", "cma")) {
   n <- validated$n
   m <- validated$m
   
-  # Determine which base method to use
-  if (method %in% c("akc", "cid")) {
-    # Use Kendall framework (AKC functions)
-    if (m == 1) {
-      akc_val <- compute_akc(X[, 1], Y)
-      
-      if (method == "cid") {
-        # Convert AKC to CID: CID = (AKC + 1) / 2
-        estimates <- (akc_val + 1) / 2
-      } else {  # method == "akc"
-        estimates <- akc_val
-      }
-    } else {
-      akcs <- compute_akc_multivariate(X, Y)
-  
-      
-      if (method == "cid") {
-        # Convert AKCs to CIDs: CID = (AKC + 1) / 2
-        estimates <- (akcs + 1) / 2
-      } else {  # method == "akc"
-        estimates <- akcs
-
-      }
-    }
-  } else {
-    # Use Goodman-Kruskal framework (CMA functions)
+  # Pre-compute Y ranks once for methods that need them
+  rank_methods <- c("agc", "cma", "rho_a", "rho_b")
+  if (method %in% rank_methods) {
     y_ranks <- rank(Y, ties.method = "average")
-    
-    if (m == 1) {
-      x_ranks <- rank(X[, 1], ties.method = "average")
-      agc_val <- compute_agc(y_ranks, x_ranks)
-      
-      if (method == "cma") {
-        estimates <- (agc_val + 1) / 2
-      } else {  # method == "agc"
-        # Convert CMA to AGC: AGC = 2*CMA - 1
-        estimates <- agc_val
-      }
-    } else {
-      # Rank each column of X
-      xarray_ranks <- matrix(0, nrow = m, ncol = n)
-      for (i in 1:m) {
-        xarray_ranks[i, ] <- rank(X[, i], ties.method = "average")
-      }
-      
-      agcs <- compute_agc_multivariate(y_ranks, xarray_ranks)
-      
-      if (method == "cma") {
-        estimates <- (agcs + 1) / 2
-        
-      } else {  # method == "agc"
-        # Convert CMAs to AGCs: AGC = 2*CMA - 1
-        estimates <- agcs
-      }
-    }
   }
   
-  # Format output
-  out <- structure(
-      list(
-        estimate = estimates,
-        method = method
-      ),
-      class = "acor"
-  )
+  compute_one <- function(xk, Y, method) {
+    switch(method,
+           akc = compute_akc(xk, Y),
+           cid = (compute_akc(xk, Y) + 1) / 2,
+           agc = compute_agc(y_ranks, rank(xk, ties.method = "average")),
+           cma = (compute_agc(y_ranks, rank(xk, ties.method = "average")) + 1) / 2,
+           tau_a = kendall_tau_a(xk, Y),
+           tau_b = kendall_tau_b(xk, Y),
+           tau_b_mod = kendall_tau_b_mod(xk, Y),
+           gamma = goodman_kruskal_gamma(xk, Y),
+           rho_a = comp_spearman_rho_a(y_ranks, rank(xk, ties.method = "average")),
+           rho_b = comp_spearman_rho_b(y_ranks, rank(xk, ties.method = "average")),
+           pearson = comp_pearson_rho(xk, Y)
+    )
+  }
   
-  return(out)
+  estimates <- vapply(seq_len(m), function(k) compute_one(X[, k], Y, method), numeric(1))
+  
+  structure(
+    list(estimate = estimates, method = method),
+    class = "acor"
+  )
 }
 
 
@@ -131,7 +116,7 @@ print.acor <- function(x, ...) {
 #' 
 #' @param X Predictor variable (vector) or two predictors (matrix with 2 columns) to compare
 #' @param Y Outcome variable (vector)
-#' @param method Character string specifying the method: "akc", "agc", "cid", or "cma"
+#' @param method Character string specifying the method: "akc", "agc", "cid", "cma" or "tau_a"
 #' @param alternative Character string specifying the alternative hypothesis:
 #'   * `"two.sided"` (default): tests if correlation differs from null value
 #'   * `"greater"`: tests if correlation is greater than null value
@@ -181,7 +166,7 @@ print.acor <- function(x, ...) {
 #' @importFrom stats setNames qnorm pnorm pchisq acf cov
 #' @export
 acor.test <- function(X, Y, 
-                      method = c("akc", "agc", "cid", "cma"),
+                      method = c("akc", "agc", "cid", "cma", "tau_a"),
                       alternative = c("two.sided", "less", "greater"),
                       conf.level = 0.95,
                       fisher = FALSE, 
@@ -198,7 +183,7 @@ acor.test <- function(X, Y,
   n <- validated$n
   m <- validated$m
   
-  if (method %in% c("akc", "agc")) {
+  if (method %in% c("akc", "agc", "tau_a")) {
     null.value <- 0  # Independence for [-1, 1] scale
   } else {  # cid or cma
     null.value <- 0.5  # Independence for [0, 1] scale
@@ -243,8 +228,22 @@ acor.test <- function(X, Y,
         variance_ind <- Sigma_ind
       }
     }
+  } else if (method == "tau_a") {
+    version <- select_kernel_version(Y, X)
+    
+    if (m == 1) {
+      result <- compute_tau_a_variance(X[, 1], Y, IID = IID, version = version)
+      estimates <- result$tau_a
+      variance <- result$var
+      variance_ind <- result$var_ind
+    } else {
+      result <- compute_tau_a_multivariate_variance(X, Y, IID = IID, version = version)
+      estimates <- result$tau_a_vector
+      variance <- result$Sigma
+      variance_ind <- result$Sigma_ind
+    } 
   } else {
-    # Use Goodman-Kruskal framework (AGC/CMA)
+
     y_ranks <- rank(Y, ties.method = "average")
     version_agc <- select_agc_kernel_version(Y, X)
     
