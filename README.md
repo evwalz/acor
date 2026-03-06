@@ -27,13 +27,24 @@ acor.test(X, y, method = "agc")
 
 ## Methods
 
-| Method | Scale | Independence value |
-|--------|-------|---------------------|
-| AKC, AGC | [-1, 1] | 0 |
-| CID, CMA | [0, 1] | 0.5 |
+### Asymmetric measures (directional, Y is the outcome)
 
-- **AKC** = Asymmetric Kendall Correlation (Kendall framework)
-- **AGC** = Asymmetric Grade Correlation (Spearman framework)
-- **CID** = (AKC + 1) / 2
-- **CMA** = (AGC + 1) / 2
+| Method | Description | Scale | Independence value |
+|--------|-------------|-------|-------------------|
+| AKC | Asymmetric Kendall Correlation | [-1, 1] | 0 |
+| AGC | Asymmetric Grade Correlation | [-1, 1] | 0 |
+| CID | Concordance-Discordance Index = (AKC + 1) / 2 | [0, 1] | 0.5 |
+| CMA | Coefficient of Monotone Association = (AGC + 1) / 2 | [0, 1] | 0.5 |
+
+### Symmetric measures
+
+| Method | Description | Scale | Independence value |
+|--------|-------------|-------|-------------------|
+| tau_a | Kendall's tau-a (no tie correction) | [-1, 1] | 0 |
+| tau_b | Kendall's tau-b (pair-based tie correction) | [-1, 1] | 0 |
+| tau_b_mod | Modified tau-b (triple-based tie correction) | [-1, 1] | 0 |
+| gamma | Goodman-Kruskal gamma | [-1, 1] | 0 |
+| rho_a | Spearman's rho (no tie correction) | [-1, 1] | 0 |
+| rho_b | Spearman's rho (with tie correction) | [-1, 1] | 0 |
+| pearson | Pearson correlation | [-1, 1] | 0 |
 

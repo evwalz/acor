@@ -432,3 +432,39 @@ Tau_ind_LRV <- function(X, Y) {
   64 * sum(x_autoc[1] * y_autoc[1], 2 * (w * x_autoc[-1] * y_autoc[-1]))
 }
 
+
+SRho_LRV <- function(X, Y, spearman, bandwidth = "Dehling"){
+  if (length(X) != length(Y)){stop("X and Y must have equal length")}
+  n <- length(X)
+  
+  # Determine bandwidth
+  if (bandwidth == "StockWatson"){b <- floor(0.75 * n^(1/3))}
+  else if (bandwidth == "Dehling"){b <- floor(2 * n^(1/3))}
+  else stop("Please insert a valid bandwith calculation method")
+  
+  # Calculate weights
+  h <- 1:(n-1)
+  w <- pmax(1 - abs(h) / (b + 1), 0)
+  
+  # Define functions
+  G_XY <- Vectorize(function(x_val, y_val) (mean(X <= x_val & Y <= y_val) + mean(X <= x_val & Y < y_val) + mean(X < x_val & Y <= y_val) + mean(X < x_val & Y < y_val)) / 4)
+  G_X <- Vectorize(function(x_val) (mean(X < x_val) + mean(X <= x_val)) / 2)
+  G_Y <- Vectorize(function(y_val) (mean(Y < y_val) + mean(Y <= y_val)) / 2)
+  g_x <- Vectorize(function(x_val) mean(G_XY(x_val, Y)))
+  g_y <- Vectorize(function(y_val) mean(G_XY(X, y_val)))
+  
+  # Define kernel realizations
+  G_XX <- G_X(X)
+  G_YY <- G_Y(Y)
+  k_XY <- 4 * (g_x(X) + g_y(Y) + G_XX * G_YY - G_XX - G_YY) + 1 - spearman
+  
+  # Calculate autocovariances in a vector with row = lag
+  k_XY_autoc <- stats::acf(k_XY, plot = FALSE, type = "covariance", demean = FALSE, lag.max = n - 1)$acf # k_XY has mean 0. Therefore, demean = FALSE
+  
+  # Calculate estimator of LRV for srho
+  SRho_LRV <- 9 * sum(k_XY_autoc[1], 2 * (w * k_XY_autoc[-1]))
+  
+  return(SRho_LRV)
+}
+
+

@@ -166,7 +166,7 @@ print.acor <- function(x, ...) {
 #' @importFrom stats setNames qnorm pnorm pchisq acf cov
 #' @export
 acor.test <- function(X, Y, 
-                      method = c("akc", "agc", "cid", "cma", "tau_a"),
+                      method = c("akc", "agc", "cid", "cma", "tau_a", "rho_a"),
                       alternative = c("two.sided", "less", "greater"),
                       conf.level = 0.95,
                       fisher = FALSE, 
@@ -183,7 +183,7 @@ acor.test <- function(X, Y,
   n <- validated$n
   m <- validated$m
   
-  if (method %in% c("akc", "agc", "tau_a")) {
+  if (method %in% c("akc", "agc", "tau_a", "rho_a")) {
     null.value <- 0  # Independence for [-1, 1] scale
   } else {  # cid or cma
     null.value <- 0.5  # Independence for [0, 1] scale
@@ -242,6 +242,27 @@ acor.test <- function(X, Y,
       variance <- result$Sigma
       variance_ind <- result$Sigma_ind
     } 
+  } else if (method == "rho_a") {
+    y_ranks <- rank(Y, ties.method = "average")
+    version_agc <- select_agc_kernel_version(Y, X)
+    
+    if (m == 1) {
+      x_ranks <- rank(X[, 1], ties.method = "average")
+      result <- compute_rho_a_variance(x_ranks, y_ranks, IID = IID, version = version_agc)
+      estimates <- result$rho_a
+      variance <- result$var
+      variance_ind <- result$var_ind
+    } else {
+      xarray_ranks <- matrix(0, nrow = m, ncol = n)
+      for (i in 1:m) {
+        xarray_ranks[i, ] <- rank(X[, i], ties.method = "average")
+      }
+      result <- compute_rho_a_multivariate_variance(y_ranks, xarray_ranks, IID = IID, version = version_agc)
+      estimates <- result$rho_a_vector
+      variance <- result$Sigma
+      variance_ind <- result$Sigma_ind
+    }
+    
   } else {
 
     y_ranks <- rank(Y, ties.method = "average")

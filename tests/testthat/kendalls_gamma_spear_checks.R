@@ -462,3 +462,172 @@ test_that("multivariate tau-a HAC covariance matches brute force (with ties)", {
   
   expect_equal(result$Sigma, Sigma_expected, tolerance = 1e-10)
 })
+
+### SPearman rho ####
+# === Compare rho_a to AGC in no-ties case ===
+
+test_that("rho_a variance approximately equals AGC variance when no ties (IID)", {
+  set.seed(42)
+  n <- 100
+  X <- rnorm(n)
+  Y <- rnorm(n)
+  
+  x_rank <- rank(X, ties.method = "average")
+  y_rank <- rank(Y, ties.method = "average")
+  
+  result_rho <- acor:::compute_rho_a_variance(x_rank, y_rank, IID = TRUE)
+  result_agc <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = TRUE, version = "v2")
+  
+  expect_equal(result_rho$rho_a, result_agc$agc, tolerance = 1e-3)
+  expect_equal(result_rho$var, result_agc$var, tolerance = 1e-3)
+  expect_equal(result_rho$var_ind, result_agc$var_ind, tolerance = 1e-3)
+})
+
+test_that("rho_a variance approximately equals AGC variance when no ties (HAC)", {
+  set.seed(42)
+  n <- 100
+  X <- rnorm(n)
+  Y <- rnorm(n)
+  
+  x_rank <- rank(X, ties.method = "average")
+  y_rank <- rank(Y, ties.method = "average")
+  
+  result_rho <- acor:::compute_rho_a_variance(x_rank, y_rank, IID = FALSE)
+  result_agc <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = FALSE, version = "v2")
+  
+  expect_equal(result_rho$rho_a, result_agc$agc, tolerance = 1e-3)
+  expect_equal(result_rho$var, result_agc$var, tolerance = 1e-3)
+  expect_equal(result_rho$var_ind, result_agc$var_ind, tolerance = 1e-3)
+})
+
+# === Compare rho_a to brute force (IID) ===
+
+test_that("rho_a IID variance matches brute force (no ties)", {
+  set.seed(42)
+  n <- 100
+  X <- rnorm(n)
+  Y <- rnorm(n)
+  
+  x_rank <- rank(X, ties.method = "average")
+  y_rank <- rank(Y, ties.method = "average")
+  
+  result <- acor:::compute_rho_a_variance(x_rank, y_rank, IID = TRUE)
+  
+  G_XY <- Vectorize(function(x_val, y_val) (mean(X <= x_val & Y <= y_val) + mean(X <= x_val & Y < y_val) + mean(X < x_val & Y <= y_val) + mean(X < x_val & Y < y_val)) / 4)
+  G_X <- Vectorize(function(x_val) (mean(X < x_val) + mean(X <= x_val)) / 2)
+  G_Y <- Vectorize(function(y_val) (mean(Y < y_val) + mean(Y <= y_val)) / 2)
+  g_x <- Vectorize(function(x_val) mean(G_XY(x_val, Y)))
+  g_y <- Vectorize(function(y_val) mean(G_XY(X, y_val)))
+  
+  rho <- 12 * (n - 1) / n^3 * stats::cov(X, Y, method = "spearman")
+  G_XX <- G_X(X)
+  G_YY <- G_Y(Y)
+  var_expected <- 9 * mean((4 * (g_x(X) + g_y(Y) + G_XX * G_YY - G_XX - G_YY) + 1 - rho)^2)
+  var_ind_expected <- 1
+  
+  expect_equal(result$rho_a, rho, tolerance = 1e-10)
+  expect_equal(result$var, var_expected, tolerance = 1e-10)
+  expect_equal(result$var_ind, var_ind_expected, tolerance = 1e-3)
+})
+
+test_that("rho_a IID variance matches brute force (with ties)", {
+  set.seed(123)
+  n <- 50
+  X <- sample(1:5, n, replace = TRUE)
+  Y <- sample(1:5, n, replace = TRUE)
+  
+  x_rank <- rank(X, ties.method = "average")
+  y_rank <- rank(Y, ties.method = "average")
+  
+  result <- acor:::compute_rho_a_variance(x_rank, y_rank, IID = TRUE)
+  
+  G_XY <- Vectorize(function(x_val, y_val) (mean(X <= x_val & Y <= y_val) + mean(X <= x_val & Y < y_val) + mean(X < x_val & Y <= y_val) + mean(X < x_val & Y < y_val)) / 4)
+  G_X <- Vectorize(function(x_val) (mean(X < x_val) + mean(X <= x_val)) / 2)
+  G_Y <- Vectorize(function(y_val) (mean(Y < y_val) + mean(Y <= y_val)) / 2)
+  g_x <- Vectorize(function(x_val) mean(G_XY(x_val, Y)))
+  g_y <- Vectorize(function(y_val) mean(G_XY(X, y_val)))
+  
+  rho <- 12 * (n - 1) / n^3 * stats::cov(X, Y, method = "spearman")
+  G_XX <- G_X(X)
+  G_YY <- G_Y(Y)
+  var_expected <- 9 * mean((4 * (g_x(X) + g_y(Y) + G_XX * G_YY - G_XX - G_YY) + 1 - rho)^2)
+  
+  X_TieProb3 <- sum((table(X) / n)^3)
+  Y_TieProb3 <- sum((table(Y) / n)^3)
+  var_ind_expected <- (1 - X_TieProb3) * (1 - Y_TieProb3)
+  
+  expect_equal(result$rho_a, rho, tolerance = 1e-10)
+  expect_equal(result$var, var_expected, tolerance = 1e-10)
+  expect_equal(result$var_ind, var_ind_expected, tolerance = 1e-10)
+})
+
+# === Compare rho_a to brute force (HAC) ===
+
+test_that("rho_a HAC variance matches brute force (no ties)", {
+  set.seed(42)
+  n <- 100
+  X <- rnorm(n)
+  Y <- rnorm(n)
+  
+  x_rank <- rank(X, ties.method = "average")
+  y_rank <- rank(Y, ties.method = "average")
+  
+  result <- acor:::compute_rho_a_variance(x_rank, y_rank, IID = FALSE)
+  
+  rho <- 12 * (n - 1) / n^3 * stats::cov(X, Y, method = "spearman")
+  var_expected <- SRho_LRV(X, Y, rho)
+  var_ind_expected <- 9 / 4 * Tau_ind_LRV(X, Y)
+  
+  expect_equal(result$rho_a, rho, tolerance = 1e-10)
+  expect_equal(result$var, var_expected, tolerance = 1e-10)
+  expect_equal(result$var_ind, var_ind_expected, tolerance = 1e-10)
+})
+
+test_that("rho_a HAC variance matches brute force (with ties)", {
+  set.seed(123)
+  n <- 50
+  X <- sample(1:5, n, replace = TRUE)
+  Y <- sample(1:5, n, replace = TRUE)
+  
+  x_rank <- rank(X, ties.method = "average")
+  y_rank <- rank(Y, ties.method = "average")
+  
+  result <- acor:::compute_rho_a_variance(x_rank, y_rank, IID = FALSE)
+  
+  rho <- 12 * (n - 1) / n^3 * stats::cov(X, Y, method = "spearman")
+  var_expected <- SRho_LRV(X, Y, rho)
+  var_ind_expected <- 9 / 4 * Tau_ind_LRV(X, Y)
+  
+  expect_equal(result$rho_a, rho, tolerance = 1e-10)
+  expect_equal(result$var, var_expected, tolerance = 1e-10)
+  expect_equal(result$var_ind, var_ind_expected, tolerance = 1e-10)
+})
+
+# === acor.test integration ===
+
+test_that("acor.test works for rho_a single predictor", {
+  set.seed(42)
+  n <- 100
+  X <- rnorm(n)
+  Y <- rnorm(n)
+  
+  result <- acor:::acor.test(X, Y, method = "rho_a")
+  
+  expect_s3_class(result, "acor_htest")
+  expect_equal(unname(result$estimate), acor(X, Y, method = "rho_a")$estimate, tolerance = 1e-10)
+  expect_true(is.numeric(result$p.value))
+  expect_true(result$p.value >= 0 && result$p.value <= 1)
+})
+
+test_that("acor.test works for rho_a multiple predictors", {
+  set.seed(42)
+  n <- 100
+  X <- matrix(rnorm(200), ncol = 2)
+  Y <- rnorm(n)
+  
+  result <- acor:::acor.test(X, Y, method = "rho_a")
+  
+  expect_s3_class(result, "acor_htest")
+  expect_length(result$estimate, 2)
+  expect_true(is.numeric(result$p.value))
+})

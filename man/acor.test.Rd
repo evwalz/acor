@@ -7,7 +7,7 @@
 acor.test(
   X,
   Y,
-  method = c("akc", "agc", "cid", "cma", "tau_a"),
+  method = c("akc", "agc", "cid", "cma", "tau_a", "rho_a"),
   alternative = c("two.sided", "less", "greater"),
   conf.level = 0.95,
   fisher = FALSE,
@@ -19,7 +19,7 @@ acor.test(
 
 \item{Y}{Outcome variable (vector)}
 
-\item{method}{Character string specifying the method: "akc", "agc", "cid", or "cma"}
+\item{method}{Character string specifying the method: "akc", "agc", "cid", "cma" or "tau_a"}
 
 \item{alternative}{Character string specifying the alternative hypothesis:
 \itemize{
