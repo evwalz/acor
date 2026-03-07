@@ -183,13 +183,25 @@ acor.test <- function(X, Y,
   n <- validated$n
   m <- validated$m
   
+  # Pre-compute ranks for methods that need them
+  rank_methods <- c("agc", "cma", "rho_a")
+  if (method %in% rank_methods) {
+    y_ranks <- rank(Y, ties.method = "average")
+    if (m == 1) {
+      x_ranks <- rank(X[, 1], ties.method = "average")
+    } else {
+      xarray_ranks <- matrix(0, nrow = m, ncol = n)
+      for (i in 1:m) {
+        xarray_ranks[i, ] <- rank(X[, i], ties.method = "average")
+      }
+    }
+  }
+  
   if (method %in% c("akc", "agc", "tau_a", "rho_a")) {
     null.value <- 0  # Independence for [-1, 1] scale
   } else {  # cid or cma
     null.value <- 0.5  # Independence for [0, 1] scale
   }
-  
-  # Fisher transformation only valid for AKC/AGC with single predictor
   
   # Compute correlation(s) - this already handles variance correctly
   # Compute estimates and variance based on method
@@ -243,34 +255,23 @@ acor.test <- function(X, Y,
       variance_ind <- result$Sigma_ind
     } 
   } else if (method == "rho_a") {
-    y_ranks <- rank(Y, ties.method = "average")
-    version_agc <- select_agc_kernel_version(Y, X)
     
     if (m == 1) {
-      x_ranks <- rank(X[, 1], ties.method = "average")
-      result <- compute_rho_a_variance(x_ranks, y_ranks, IID = IID, version = version_agc)
+      result <- compute_rho_a_variance(x_ranks, y_ranks, IID = IID)
       estimates <- result$rho_a
       variance <- result$var
       variance_ind <- result$var_ind
     } else {
-      xarray_ranks <- matrix(0, nrow = m, ncol = n)
-      for (i in 1:m) {
-        xarray_ranks[i, ] <- rank(X[, i], ties.method = "average")
-      }
-      result <- compute_rho_a_multivariate_variance(y_ranks, xarray_ranks, IID = IID, version = version_agc)
+      result <- compute_rho_a_multivariate_variance(y_ranks, xarray_ranks, IID = IID)
       estimates <- result$rho_a_vector
       variance <- result$Sigma
       variance_ind <- result$Sigma_ind
     }
     
   } else {
-
-    y_ranks <- rank(Y, ties.method = "average")
-    version_agc <- select_agc_kernel_version(Y, X)
     
     if (m == 1) {
-      x_ranks <- rank(X[, 1], ties.method = "average")
-      result <- compute_agc_variance_auto(y_ranks, x_ranks, IID = IID, version = version_agc)
+      result <- compute_agc_variance_auto(y_ranks, x_ranks, IID = IID)
       agc_val <- result$agc
       var_agc <- result$var
       var_agc_ind <- result$var_ind  # Asymptotic variance for AGC
@@ -285,12 +286,8 @@ acor.test <- function(X, Y,
         variance_ind <- var_agc_ind 
       }
     } else {  # m >= 2
-      xarray_ranks <- matrix(0, nrow = m, ncol = n)
-      for (i in 1:m) {
-        xarray_ranks[i, ] <- rank(X[, i], ties.method = "average")
-      }
       
-      result <- compute_agc_multivariate_variance_auto(y_ranks, xarray_ranks, IID = IID, version = version_agc)
+      result <- compute_agc_multivariate_variance_auto(y_ranks, xarray_ranks, IID = IID)
       agcs <- result$agc_vector
       Sigma_agc_mat <- result$Sigma
       Sigma_agc_ind <- result$Sigma_ind
@@ -554,7 +551,9 @@ print.acor_htest <- function(x, ...) {
   
   cat("alternative hypothesis:", x$alternative, "\n")
   if (!is.null(x$conf.int)) {
-    cat(format(100 * x$conf.level), " percent confidence interval:\n")
+    cl <- attr(x$conf.int, "conf.level")  # single predictor (htest convention)
+    if (is.null(cl)) cl <- x$conf.level    # multi predictor (stored directly)
+    cat(format(100 * cl), " percent confidence interval:\n")
     cat(" ", format(x$conf.int[1], digits = 4), format(x$conf.int[2], digits = 4), "\n")
   }
   cat("\n")

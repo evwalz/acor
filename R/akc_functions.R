@@ -415,19 +415,6 @@ compute_akc <- function(X, Y) {
   compute_kendall(X, Y)$tau
 }
 
-#' Compute AKC for multiple predictors (no variance)
-#'
-#' @param X Numeric matrix of predictors (n x m), or a vector.
-#' @param Y Numeric outcome vector.
-#' @return Numeric vector of AKC values (length m).
-#' @keywords internal
-#' @noRd
-compute_akc_multivariate <- function(X, Y) {
-  X <- ensure_matrix(X)
-  m <- ncol(X)
-  vapply(seq_len(m), function(k) compute_kendall(X[, k], Y)$tau, numeric(1))
-}
-
 
 # ============================================================================
 # OPTIMIZED KERNEL COMPUTATIONS

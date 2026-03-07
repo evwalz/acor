@@ -126,37 +126,6 @@ compute_akc_multivariate_variance_auto <- function(X, Y, IID = TRUE, version = "
 
 
 # ============================================================================
-# AGC KERNEL VERSION SELECTION
-# ============================================================================
-
-#' Determine optimal AGC kernel version based on data characteristics
-#' 
-#' AGC has two implementations:
-#' - "original": kernel_ties_optim2 using sign matrices — O(R*M + R*N + M*N)
-#'   where R = unique X values, M = unique Y values.  Fast when R or M are
-#'   small (ties/discrete data), but O(n^2) when data is continuous.
-#' - "v2": Fenwick tree based kernel — O(n log n).  Faster for large n
-#'   continuous data.
-#' 
-#' @param Y Numeric outcome vector
-#' @param X Numeric predictor vector or matrix
-#' @return Character: "v2" or "binary"
-#' @keywords internal
-#' @noRd
-select_agc_kernel_version <- function(Y, X) {
-  n <- length(Y)
-  M <- length(unique(Y))
-  
-  # Binary Y gets its own specialization
-  if (M == 2) {
-    return("binary")
-  } else {
-    return("v2")
-  }
-}
-
-
-# ============================================================================
 # AGC INTERNAL DISPATCHER FUNCTIONS
 # ============================================================================
 
@@ -169,16 +138,16 @@ select_agc_kernel_version <- function(Y, X) {
 #' @return List with agc, var, and var_ind
 #' @keywords internal
 #' @noRd
-compute_agc_variance_auto <- function(y_rank, x_rank, IID = TRUE, version = "v2") {
-  
+compute_agc_variance_auto <- function(y_rank, x_rank, IID = TRUE) {
+  binary <- is_binary(y_rank)
   if (IID) {
-    if (version == "binary") {
+    if (binary) {
       return(Sigma_agc_binary(y_rank, x_rank))
     } else {  # v2
       return(Sigma_agc_v2(y_rank, x_rank))
     }
   } else {
-    if (version == "binary") {
+    if (binary) {
       return(Sigma_agc_ts_binary(y_rank, x_rank))
     } else {  # v2
       return(Sigma_agc_ts_v2(y_rank, x_rank))
@@ -195,16 +164,16 @@ compute_agc_variance_auto <- function(y_rank, x_rank, IID = TRUE, version = "v2"
 #' @return List with agc_vector, Sigma, and Sigma_ind
 #' @keywords internal
 #' @noRd
-compute_agc_multivariate_variance_auto <- function(y_rank, xarray_ranks, IID = TRUE, version = "v2") {
-  
+compute_agc_multivariate_variance_auto <- function(y_rank, xarray_ranks, IID = TRUE) {
+  binary <- is_binary(y_rank)
   if (IID) {
-    if (version == "binary") {
+    if (binary) {
       return(Sigma_agc_multivariate_binary(y_rank, xarray_ranks))
     } else {  # v2
       return(Sigma_agc_multivariate_v2(y_rank, xarray_ranks))
     }
   } else {
-    if (version == "binary") {
+    if (binary) {
       return(Sigma_agc_multivariate_ts_binary(y_rank, xarray_ranks))
     } else {  # v2
       return(Sigma_agc_multivariate_ts_v2(y_rank, xarray_ranks))

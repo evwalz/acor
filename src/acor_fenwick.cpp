@@ -147,32 +147,31 @@ JointCounts compute_joint_counts(
 
 
 // ============================================================================
-// kendall_tau_sign_cpp
+// Shared concordant/discordant pair counting via Fenwick tree -- O(n log n)
 //
-// Computes the asymmetric Kendall tau statistic using a Fenwick tree.
-// Returns: list(tau, expectation)
+// Counts pairs (i,j) with i<j where X[i]<X[j] & Y[i]<Y[j] (concordant)
+// and X[i]<X[j] & Y[i]>Y[j] (discordant). X-tied pairs are excluded.
+//
+// Returns: {concordant, discordant}
 // ============================================================================
 
-// [[Rcpp::export]]
-List kendall_tau_sign_cpp(NumericVector X, NumericVector Y) {
+struct PairCounts {
+  double concordant;
+  double discordant;
+};
+
+PairCounts count_concordant_discordant(NumericVector X, NumericVector Y) {
   int n = X.size();
-  double num_pairs = (double)n * (n - 1) / 2.0;
-  
-  // Count Y ties
-  std::map<double, int> freq_y_map;
-  for (int i = 0; i < n; i++) freq_y_map[Y[i]]++;
-  double n_ties_y = 0;
-  for (auto& p : freq_y_map)
-    n_ties_y += (double)p.second * (p.second - 1) / 2.0;
   
   // Compress Y to 1..M
-  std::vector<double> Y_unique;
-  for (auto& p : freq_y_map) Y_unique.push_back(p.first);
-  int M = Y_unique.size();
+  std::map<double, int> y_map;
+  for (int i = 0; i < n; i++) y_map[Y[i]];
+  int rank = 1;
+  for (auto& p : y_map) p.second = rank++;
+  int M = y_map.size();
+  
   std::vector<int> Yc(n);
-  for (int i = 0; i < n; i++)
-    Yc[i] = std::lower_bound(Y_unique.begin(), Y_unique.end(), Y[i])
-    - Y_unique.begin() + 1;
+  for (int i = 0; i < n; i++) Yc[i] = y_map[Y[i]];
   
   // Sort indices by (X, Y)
   std::vector<int> ord(n);
@@ -184,21 +183,19 @@ List kendall_tau_sign_cpp(NumericVector X, NumericVector Y) {
   
   // Count concordant/discordant via Fenwick tree, processing by X-groups
   FenwickTree tree(M);
-  double n_concordant = 0;
-  double n_discordant = 0;
+  double concordant = 0;
+  double discordant = 0;
   
   int i = 0;
   while (i < n) {
-    // Find end of current X-group
     int j = i;
     while (j < n && X[ord[j]] == X[ord[i]]) j++;
     
     // Query before inserting (so X-tied pairs are not counted)
     for (int k = i; k < j; k++) {
       int yc = Yc[ord[k]];
-      n_concordant += tree.query(yc - 1);
-      int total = tree.query(M);
-      n_discordant += (total - tree.query(yc));
+      concordant += tree.query(yc - 1);
+      discordant += tree.query(M) - tree.query(yc);
     }
     
     // Insert all elements of this X-group
@@ -208,9 +205,49 @@ List kendall_tau_sign_cpp(NumericVector X, NumericVector Y) {
     i = j;
   }
   
-  double sum_sign = n_concordant - n_discordant;
+  return {concordant, discordant};
+}
+
+
+// ============================================================================
+// Compute proportion of tied pairs from frequency counts -- O(n)
+//
+// For a vector with frequency table {n_1, n_2, ...}, the proportion of
+// tied pairs is sum(n_k * (n_k - 1)) / (n * (n - 1)).
+// This equals 1 - kendall_tau_a(v, v), but without the O(n log n) sort.
+// ============================================================================
+
+double pair_tie_proportion(NumericVector V) {
+  int n = V.size();
+  std::map<double, int> freq;
+  for (int i = 0; i < n; i++) freq[V[i]]++;
+  
+  double n_tied_pairs = 0;
+  for (auto& p : freq) {
+    double nk = p.second;
+    n_tied_pairs += nk * (nk - 1);
+  }
+  return n_tied_pairs / ((double)n * (n - 1));
+}
+
+
+// ============================================================================
+// kendall_tau_sign_cpp
+//
+// Computes the asymmetric Kendall tau statistic using a Fenwick tree.
+// Returns: list(tau, expectation)
+// ============================================================================
+
+// [[Rcpp::export]]
+List kendall_tau_sign_cpp(NumericVector X, NumericVector Y) {
+  int n = X.size();
+  double num_pairs = (double)n * (n - 1) / 2.0;
+  
+  PairCounts pc = count_concordant_discordant(X, Y);
+  
+  double sum_sign = pc.concordant - pc.discordant;
   double expectation = sum_sign / num_pairs;
-  double p_tie_y = n_ties_y / num_pairs;
+  double p_tie_y = pair_tie_proportion(Y);
   double scale_factor = 1.0 - p_tie_y;
   double tau = (scale_factor > 1e-10) ? expectation / scale_factor : 0.0;
   
@@ -224,119 +261,64 @@ List kendall_tau_sign_cpp(NumericVector X, NumericVector Y) {
 // ============================================================================
 // kendall_tau_a
 //
-// Computes the Kendalls tau without tie correction
-// Returns: tau
+// Kendall's tau-a (no tie correction): (C - D) / n(n-1)/2
 // ============================================================================
+
 // [[Rcpp::export]]
 double kendall_tau_a(NumericVector X, NumericVector Y) {
   int n = X.size();
   double num_pairs = (double)n * (n - 1) / 2.0;
-  
-  // Compress Y to 1..M
-  std::map<double, int> y_map;
-  for (int i = 0; i < n; i++) y_map[Y[i]];
-  int rank = 1;
-  for (auto& p : y_map) p.second = rank++;
-  int M = y_map.size();
-  
-  std::vector<int> Yc(n);
-  for (int i = 0; i < n; i++) Yc[i] = y_map[Y[i]];
-  
-  // Sort indices by (X, Y)
-  std::vector<int> ord(n);
-  std::iota(ord.begin(), ord.end(), 0);
-  std::sort(ord.begin(), ord.end(), [&](int a, int b) {
-    if (X[a] != X[b]) return X[a] < X[b];
-    return Y[a] < Y[b];
-  });
-  
-  // Count concordant/discordant via Fenwick tree, grouping by X
-  FenwickTree tree(M);
-  double concordant = 0;
-  double discordant = 0;
-  
-  int i = 0;
-  while (i < n) {
-    int j = i;
-    while (j < n && X[ord[j]] == X[ord[i]]) j++;
-    
-    for (int k = i; k < j; k++) {
-      int yc = Yc[ord[k]];
-      concordant += tree.query(yc - 1);
-      discordant += tree.query(M) - tree.query(yc);
-    }
-    
-    for (int k = i; k < j; k++)
-      tree.update(Yc[ord[k]]);
-    
-    i = j;
-  }
-  
-  return (concordant - discordant) / num_pairs;
+  PairCounts pc = count_concordant_discordant(X, Y);
+  return (pc.concordant - pc.discordant) / num_pairs;
 }
 
+
+// ============================================================================
+// kendall_tau_b
+//
+// Kendall's tau-b (pair-based tie correction).
+// Uses O(n) tie proportion instead of calling kendall_tau_a(V, V).
+// ============================================================================
 
 // [[Rcpp::export]]
 double kendall_tau_b(NumericVector X, NumericVector Y) {
-  double tau_xy = kendall_tau_a(X, Y);
-  double tau_xx = kendall_tau_a(X, X);
-  double tau_yy = kendall_tau_a(Y, Y);
+  double tau_a_xy = kendall_tau_a(X, Y);
   
-  double denom = std::sqrt(tau_xx * tau_yy);
-  return (denom > 1e-10) ? tau_xy / denom : 0.0;
+  // tau_a(V, V) = 1 - pair_tie_proportion(V), so:
+  //   sqrt(tau_a(X,X) * tau_a(Y,Y))
+  // = sqrt((1 - p_x) * (1 - p_y))
+  double p_x = pair_tie_proportion(X);
+  double p_y = pair_tie_proportion(Y);
+  double denom = std::sqrt((1.0 - p_x) * (1.0 - p_y));
+  
+  return (denom > 1e-10) ? tau_a_xy / denom : 0.0;
 }
 
+
+// ============================================================================
+// goodman_kruskal_gamma
+//
+// Gamma = (C - D) / (C + D)
+// ============================================================================
 
 // [[Rcpp::export]]
 double goodman_kruskal_gamma(NumericVector X, NumericVector Y) {
-  int n = X.size();
-  
-  std::map<double, int> y_map;
-  for (int i = 0; i < n; i++) y_map[Y[i]];
-  int rank = 1;
-  for (auto& p : y_map) p.second = rank++;
-  int M = y_map.size();
-  
-  std::vector<int> Yc(n);
-  for (int i = 0; i < n; i++) Yc[i] = y_map[Y[i]];
-  
-  std::vector<int> ord(n);
-  std::iota(ord.begin(), ord.end(), 0);
-  std::sort(ord.begin(), ord.end(), [&](int a, int b) {
-    if (X[a] != X[b]) return X[a] < X[b];
-    return Y[a] < Y[b];
-  });
-  
-  FenwickTree tree(M);
-  double concordant = 0;
-  double discordant = 0;
-  
-  int i = 0;
-  while (i < n) {
-    int j = i;
-    while (j < n && X[ord[j]] == X[ord[i]]) j++;
-    
-    for (int k = i; k < j; k++) {
-      int yc = Yc[ord[k]];
-      concordant += tree.query(yc - 1);
-      discordant += tree.query(M) - tree.query(yc);
-    }
-    
-    for (int k = i; k < j; k++)
-      tree.update(Yc[ord[k]]);
-    
-    i = j;
-  }
-  
-  double denom = concordant + discordant;
-  return (denom > 1e-10) ? (concordant - discordant) / denom : 0.0;
+  PairCounts pc = count_concordant_discordant(X, Y);
+  double denom = pc.concordant + pc.discordant;
+  return (denom > 1e-10) ? (pc.concordant - pc.discordant) / denom : 0.0;
 }
 
 
+// ============================================================================
+// kendall_tau_b_mod
+//
+// Modified tau-b using triple-based tie correction.
+// ============================================================================
+
 // [[Rcpp::export]]
 double kendall_tau_b_mod(NumericVector X, NumericVector Y) {
+  double tau_a_val = kendall_tau_a(X, Y);
   int n = X.size();
-  double tau_a = kendall_tau_a(X, Y);
   
   // Count triple ties for X
   std::map<double, int> freq_x;
@@ -359,8 +341,9 @@ double kendall_tau_b_mod(NumericVector X, NumericVector Y) {
   triple_ties_y /= (double)n * (n - 1) * (n - 2);
   
   double denom = std::sqrt((1.0 - triple_ties_x) * (1.0 - triple_ties_y));
-  return (denom > 1e-10) ? tau_a / denom : 0.0;
+  return (denom > 1e-10) ? tau_a_val / denom : 0.0;
 }
+
 
 // ============================================================================
 // H_bar_vec_v2_cpp

@@ -204,12 +204,12 @@ ind_variance_rho_a_hac <- function(x_rank, y_rank, N, b) {
 #' Compute rho_a with variance
 #' @keywords internal
 #' @noRd
-compute_rho_a_variance <- function(x_rank, y_rank, IID = TRUE, version = "v2") {
+compute_rho_a_variance <- function(x_rank, y_rank, IID = TRUE) {
   N <- length(y_rank)
   
   rho_val <- comp_spearman_rho_a(y_rank, x_rank)
   
-  kernel_fn <- if (version == "v2") kfn_v2 else kfn_binary
+  kernel_fn <- if (is_binary(y_rank)) kfn_binary else kfn_v2
   k_p <- kernel_fn(y_rank, x_rank, rho_val)
   
   var_iid <- 9 * mean(k_p^2)
@@ -265,11 +265,11 @@ ind_covariance_rho_a_iid <- function(xarray_ranks, N, zeta_3Y) {
 #' Compute multivariate rho_a with covariance matrix
 #' @keywords internal
 #' @noRd
-compute_rho_a_multivariate_variance <- function(y_rank, xarray_ranks, IID = TRUE, version = "v2") {
+compute_rho_a_multivariate_variance <- function(y_rank, xarray_ranks, IID = TRUE) {
   k <- nrow(xarray_ranks)
   N <- length(y_rank)
   
-  kernel_fn <- if (version == "v2") kfn_v2 else kfn_binary
+  kernel_fn <- if (is_binary(y_rank)) kfn_binary else kfn_v2
   
   rho_vector <- numeric(k)
   kps <- matrix(0, nrow = k, ncol = N)

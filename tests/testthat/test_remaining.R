@@ -329,8 +329,8 @@ test_that("AGC univariate HAC: original vs v2 agree (continuous)", {
   y_rank <- rank(Y, ties.method = "average")
   x_rank <- rank(X, ties.method = "average")
   
-  r_orig <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = FALSE, version = "original")
-  r_v2   <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = FALSE, version = "v2")
+  r_orig <- Sigma_agc_ts(y_rank, x_rank)
+  r_v2   <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = FALSE)
   
   expect_equal(r_v2$agc,     r_orig$agc,     tolerance = 1e-10)
   expect_equal(r_v2$var,     r_orig$var,     tolerance = 1e-10)
@@ -345,8 +345,8 @@ test_that("AGC univariate HAC: original vs v2 agree (discrete)", {
   y_rank <- rank(Y, ties.method = "average")
   x_rank <- rank(X, ties.method = "average")
   
-  r_orig <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = FALSE, version = "original")
-  r_v2   <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = FALSE, version = "v2")
+  r_orig <- Sigma_agc_ts(y_rank, x_rank)
+  r_v2   <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = FALSE)
   
   expect_equal(r_v2$var,     r_orig$var,     tolerance = 1e-10)
   expect_equal(r_v2$var_ind, r_orig$var_ind, tolerance = 1e-10)
@@ -396,10 +396,9 @@ test_that("AGC multivariate HAC m=3: original vs v2 agree (continuous)", {
   xarray_ranks <- matrix(0, nrow = 3, ncol = n)
   for (j in 1:3) xarray_ranks[j, ] <- rank(X[, j], ties.method = "average")
   
-  r_orig <- acor:::compute_agc_multivariate_variance_auto(y_rank, xarray_ranks,
-                                                          IID = FALSE, version = "original")
+  r_orig <- Sigma_agc_multivariate_ts(y_rank, xarray_ranks)
   r_v2   <- acor:::compute_agc_multivariate_variance_auto(y_rank, xarray_ranks,
-                                                          IID = FALSE, version = "v2")
+                                                          IID = FALSE)
   
   expect_equal(r_v2$agc_vector, r_orig$agc_vector, tolerance = 1e-10)
   expect_equal(r_v2$Sigma,      r_orig$Sigma,      tolerance = 1e-10)
@@ -415,10 +414,9 @@ test_that("AGC multivariate HAC m=3: original vs v2 agree (binary Y)", {
   xarray_ranks <- matrix(0, nrow = 3, ncol = n)
   for (j in 1:3) xarray_ranks[j, ] <- rank(X[, j], ties.method = "average")
   
-  r_orig <- acor:::compute_agc_multivariate_variance_auto(y_rank, xarray_ranks,
-                                                          IID = FALSE, version = "original")
+  r_orig <- Sigma_agc_multivariate_ts(y_rank, xarray_ranks)
   r_v2   <- acor:::compute_agc_multivariate_variance_auto(y_rank, xarray_ranks,
-                                                          IID = FALSE, version = "v2")
+                                                          IID = FALSE)
   
   expect_equal(r_v2$Sigma,     r_orig$Sigma,     tolerance = 1e-10)
   expect_equal(r_v2$Sigma_ind, r_orig$Sigma_ind, tolerance = 1e-10)
@@ -478,8 +476,8 @@ test_that("AGC: binary kernel matches general kernel for binary Y (IID)", {
   y_rank <- rank(Y, ties.method = "average")
   x_rank <- rank(X, ties.method = "average")
   
-  r_orig   <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = TRUE, version = "original")
-  r_binary <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = TRUE, version = "binary")
+  r_orig   <- Sigma_agc(y_rank, x_rank)
+  r_binary <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = TRUE)
   
   expect_equal(r_binary$agc,     r_orig$agc,     tolerance = 1e-10)
   expect_equal(r_binary$var,     r_orig$var,     tolerance = 1e-10)
@@ -494,8 +492,8 @@ test_that("AGC: binary kernel matches general kernel for binary Y (HAC)", {
   y_rank <- rank(Y, ties.method = "average")
   x_rank <- rank(X, ties.method = "average")
   
-  r_orig   <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = FALSE, version = "original")
-  r_binary <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = FALSE, version = "binary")
+  r_orig   <- Sigma_agc_ts(y_rank, x_rank)
+  r_binary <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = FALSE)
   
   expect_equal(r_binary$agc,     r_orig$agc,     tolerance = 1e-10)
   expect_equal(r_binary$var,     r_orig$var,     tolerance = 1e-10)
