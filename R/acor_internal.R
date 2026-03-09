@@ -10,6 +10,9 @@
 #' @keywords internal
 #' @noRd
 validate_acor_inputs <- function(X, Y) {
+  if (is.data.frame(Y)) Y <- as.numeric(Y[[1]])
+  if (is.data.frame(X)) X <- as.matrix(X)
+  
   if (!is.numeric(Y) || !is.vector(Y)) {
     stop("Y must be a numeric vector")
   }
@@ -82,6 +85,11 @@ compute_akc_variance_auto <- function(X, Y, IID = TRUE, version = "v2") {
   tau_Y  <- tau_Y_result$expectation
   p_Y    <- tau_Y_result$p_tie_y
   tau_XY <- akc_result$expectation
+  
+  if (1 - p_Y < 1e-10) {
+    stop("Y has near-total ties (nearly constant); ",
+         "AKC variance is undefined")
+  }
   
   if (IID) {
     if (version == "v1") {
@@ -186,4 +194,86 @@ compute_agc_multivariate_variance_auto <- function(y_rank, xarray_ranks, IID = T
 is_binary <- function(Y) {
   unique_vals <- unique(Y)
   length(unique_vals) == 2
+}
+
+#' Univariate HAC long-run variance of grade functions
+#'
+#' Computes the Bartlett-kernel weighted long-run variance
+#' of centered grade functions for X and Y. All univariate
+#' HAC independence variance functions are multiples of this.
+#'
+#' @param x_grade_centered Numeric vector: (rank - 0.5)/N - 0.5
+#' @param y_grade_centered Numeric vector: (rank - 0.5)/N - 0.5
+#' @param N Integer sample size.
+#' @param b Integer bandwidth (Bartlett kernel).
+#' @return Scalar long-run variance (unscaled).
+#' @keywords internal
+#' @noRd
+ind_lrv_univariate <- function(x_grade_centered, y_grade_centered, N, b) {
+  h_vec <- 1:(N - 1)
+  w <- pmax(1 - abs(h_vec) / (b + 1), 0)
+  
+  x_autoc <- stats::acf(x_grade_centered, plot = FALSE, type = "covariance",
+                        demean = FALSE, lag.max = N - 1)$acf
+  y_autoc <- stats::acf(y_grade_centered, plot = FALSE, type = "covariance",
+                        demean = FALSE, lag.max = N - 1)$acf
+  
+  sum(x_autoc[1] * y_autoc[1], 2 * (w * x_autoc[-1] * y_autoc[-1]))
+}
+
+
+#' Multivariate HAC long-run covariance of grade functions
+#'
+#' Computes the Bartlett-kernel weighted long-run covariance matrix
+#' for multiple X predictors against a single Y. All multivariate
+#' HAC independence covariance functions are multiples of this.
+#'
+#' @param x_grades_centered Matrix of centered grades.
+#'   Rows = predictors (k), columns = observations (N) for AGC/rho_a convention.
+#'   Rows = observations (N), columns = predictors (m) for AKC/tau_a convention.
+#' @param y_grade_centered Numeric vector of length N.
+#' @param N Integer sample size.
+#' @param b Integer bandwidth.
+#' @param x_by_row Logical; TRUE if x_grades_centered is k x N (AGC/rho_a),
+#'   FALSE if N x m (AKC/tau_a).
+#' @return k x k (or m x m) unscaled long-run covariance matrix.
+#' @keywords internal
+#' @noRd
+ind_lrv_multivariate <- function(x_grades_centered, y_grade_centered, N, b,
+                                 x_by_row = FALSE) {
+  # Normalize to k x N layout
+  if (!x_by_row) {
+    # Input is N x m, transpose to m x N
+    x_grades_centered <- t(x_grades_centered)
+  }
+  k <- nrow(x_grades_centered)
+  
+  h_vec <- 1:(N - 1)
+  w <- pmax(1 - abs(h_vec) / (b + 1), 0)
+  
+  y_autoc <- stats::acf(y_grade_centered, plot = FALSE, type = "covariance",
+                        demean = FALSE, lag.max = N - 1)$acf
+  
+  Sigma <- matrix(0, nrow = k, ncol = k)
+  
+  for (j in 1:k) {
+    for (l in j:k) {
+      x_grade_j <- x_grades_centered[j, ]
+      x_grade_l <- x_grades_centered[l, ]
+      
+      xcov_0 <- mean(x_grade_j * x_grade_l)
+      hac_sum <- xcov_0 * y_autoc[1]
+      
+      for (h in seq_len(min(b, N - 1))) {
+        xcov_h <- mean(x_grade_j[1:(N - h)] * x_grade_l[(h + 1):N] +
+                         x_grade_j[(h + 1):N] * x_grade_l[1:(N - h)]) / 2
+        hac_sum <- hac_sum + 2 * w[h] * xcov_h * y_autoc[h + 1]
+      }
+      
+      Sigma[j, l] <- hac_sum
+      if (j != l) Sigma[l, j] <- hac_sum
+    }
+  }
+  
+  Sigma
 }

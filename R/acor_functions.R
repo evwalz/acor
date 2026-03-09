@@ -163,7 +163,6 @@ print.acor <- function(x, ...) {
 #' X <- cbind(x1, x2)
 #' test_result <- acor.test(X, y, method = "akc")
 #' 
-#' @importFrom stats setNames qnorm pnorm pchisq acf cov
 #' @export
 acor.test <- function(X, Y, 
                       method = c("akc", "agc", "cid", "cma", "tau_a", "rho_a"),
@@ -307,7 +306,7 @@ acor.test <- function(X, Y,
   
   # Compute z critical value for confidence interval
   alpha <- 1 - conf.level
-  z_alpha <- qnorm(1 - alpha / 2)
+  z_alpha <- stats::qnorm(1 - alpha / 2)
   
   # Perform test
   if (m == 1) {
@@ -323,14 +322,14 @@ acor.test <- function(X, Y,
     
     # Compute p-values based on alternative
     if (alternative == "two.sided") {
-      p_value <- 2 * (1 - pnorm(abs(test_stat)))
-      p_value_ind <- 2 * (1 - pnorm(abs(test_stat_ind)))
+      p_value <- 2 * (1 - stats::pnorm(abs(test_stat)))
+      p_value_ind <- 2 * (1 - stats::pnorm(abs(test_stat_ind)))
     } else if (alternative == "greater") {
-      p_value <- 1 - pnorm(test_stat)
-      p_value_ind <- 1 - pnorm(test_stat_ind)
+      p_value <- 1 - stats::pnorm(test_stat)
+      p_value_ind <- 1 - stats::pnorm(test_stat_ind)
     } else {  # less
-      p_value <- pnorm(test_stat)
-      p_value_ind <- pnorm(test_stat_ind)
+      p_value <- stats::pnorm(test_stat)
+      p_value_ind <- stats::pnorm(test_stat_ind)
     }
     
     # Confidence interval
@@ -372,7 +371,7 @@ acor.test <- function(X, Y,
      statistic_ind = c(z_ind = test_stat_ind),
      p.value = p_value,
      p.value_ind = p_value_ind,
-     estimate = setNames(estimates, method),  # or whichever method
+     estimate = stats::setNames(estimates, method),  # or whichever method
      variance = variance,
      variance_ind = variance_ind,
      Fisher = fisher,
@@ -424,8 +423,8 @@ acor.test <- function(X, Y,
     df_ind <- qr_decomp_ind$rank
     
     # P-values from chi-square distribution
-    p_value <- pchisq(chi_sq_stat, df = df, lower.tail = FALSE)
-    p_value_ind <- pchisq(chi_sq_stat_ind, df = df_ind, lower.tail = FALSE)
+    p_value <- stats::pchisq(chi_sq_stat, df = df, lower.tail = FALSE)
+    p_value_ind <- stats::pchisq(chi_sq_stat_ind, df = df_ind, lower.tail = FALSE)
     
     # --- Individual predictor tests ---
     
@@ -439,14 +438,14 @@ acor.test <- function(X, Y,
     
     # P-values for individual predictors
     if (alternative == "two.sided") {
-      p_value_individual <- 2 * (1 - pnorm(abs(test_stat_individual)))
-      p_value_individual_ind <- 2 * (1 - pnorm(abs(test_stat_individual_ind)))
+      p_value_individual <- 2 * (1 - stats::pnorm(abs(test_stat_individual)))
+      p_value_individual_ind <- 2 * (1 - stats::pnorm(abs(test_stat_individual_ind)))
     } else if (alternative == "greater") {
-      p_value_individual <- 1 - pnorm(test_stat_individual)
-      p_value_individual_ind <- 1 - pnorm(test_stat_individual_ind)
+      p_value_individual <- 1 - stats::pnorm(test_stat_individual)
+      p_value_individual_ind <- 1 - stats::pnorm(test_stat_individual_ind)
     } else {  # less
-      p_value_individual <- pnorm(test_stat_individual)
-      p_value_individual_ind <- pnorm(test_stat_individual_ind)
+      p_value_individual <- stats::pnorm(test_stat_individual)
+      p_value_individual_ind <- stats::pnorm(test_stat_individual_ind)
     }
     
     # Confidence intervals for individual predictors
@@ -494,6 +493,37 @@ acor.test <- function(X, Y,
       CI_upper = CI_upper_individual
     )
     
+    # --- Pairwise difference CIs ---
+    se_diff <- sqrt(diag(L_S_Lt))
+    
+    pair_labels <- character(n_pairs)
+    row_idx <- 1
+    for (i in 1:(m - 1)) {
+      for (j in (i + 1):m) {
+        pair_labels[row_idx] <- paste0("X", i, " - X", j)
+        row_idx <- row_idx + 1
+      }
+    }
+    
+    z_diff <- est_diff / se_diff
+    
+    if (alternative == "two.sided") {
+      p_diff <- 2 * (1 - stats::pnorm(abs(z_diff)))
+    } else if (alternative == "greater") {
+      p_diff <- 1 - stats::pnorm(z_diff)
+    } else {
+      p_diff <- stats::pnorm(z_diff)
+    }
+    
+    pairwise_table <- data.frame(
+      pair = pair_labels,
+      difference = est_diff,
+      statistic = z_diff,
+      p.value = p_diff,
+      CI_lower = est_diff - z_alpha * se_diff,
+      CI_upper = est_diff + z_alpha * se_diff
+    )
+    
     # Create result object for m >= 2
     out <- list(
       statistic = chi_sq_stat,
@@ -511,6 +541,7 @@ acor.test <- function(X, Y,
       method = paste(toupper(method), "test"),
       IID = IID,
       results = results_table,
+      pairwise_results = pairwise_table, 
       pairwise_differences = est_diff,
       contrast_matrix = L, 
       null.value = c(difference = 0),
@@ -533,29 +564,54 @@ acor.test <- function(X, Y,
 #' @export
 print.acor_htest <- function(x, ...) {
   cat("\n\t", x$method, "\n\n")
+  cat("data: ", x$data.name, "\n")
   
   if (length(x$estimate) == 1) {
-    cat("estimate =", format(x$estimate, digits = 4), "\n")
-    cat("statistic =", format(x$statistic, digits = 4), ", p-value =", format.pval(x$p.value), "\n")
+    # --- Single predictor ---
+    cat("statistic =", format(x$statistic, digits = 4),
+        ", p-value =", format.pval(x$p.value), "\n")
     if (!is.null(x$statistic_ind)) {
-      cat("statistic (ind) =", format(x$statistic_ind, digits = 4), ", p-value (ind) =", format.pval(x$p.value_ind), "\n")
+      cat("statistic (ind) =", format(x$statistic_ind, digits = 4),
+          ", p-value (ind) =", format.pval(x$p.value_ind), "\n")
     }
+    cat("alternative hypothesis: true",
+        names(x$estimate), "is not equal to", x$null.value, "\n")
+    if (!is.null(x$conf.int)) {
+      cl <- attr(x$conf.int, "conf.level")
+      cat(format(100 * cl), "percent confidence interval:\n")
+      cat(" ", format(x$conf.int[1], digits = 4),
+          format(x$conf.int[2], digits = 4), "\n")
+    }
+    cat("sample estimates:\n")
+    cat(" ", names(x$estimate), "\n")
+    cat(" ", format(x$estimate, digits = 4), "\n")
+    
   } else {
-    cat("Chi-squared =", format(x$statistic, digits = 4), ", df =", x$df, ", p-value =", format.pval(x$p.value), "\n")
+    # --- Multiple predictors ---
+    cat("Equality test (H0: all correlations equal):\n")
+    cat("Chi-squared =", format(x$statistic, digits = 4),
+        ", df =", x$df,
+        ", p-value =", format.pval(x$p.value), "\n")
     if (!is.null(x$statistic_ind)) {
-      cat("Chi-squared (ind) =", format(x$statistic_ind, digits = 4), ", df =", x$df_ind, ", p-value (ind) =", format.pval(x$p.value_ind), "\n")
+      cat("Chi-squared (ind) =", format(x$statistic_ind, digits = 4),
+          ", df =", x$df_ind,
+          ", p-value (ind) =", format.pval(x$p.value_ind), "\n")
     }
+    
     cat("\nIndividual predictors:\n")
-    print(x$results)
+    print(x$results, row.names = FALSE)
+    
+    if (!is.null(x$pairwise_results)) {
+      cl <- x$conf.level
+      cat("\nPairwise differences")
+      if (!is.null(cl)) cat(" (", format(100 * cl), "% CI)", sep = "")
+      cat(":\n")
+      print(x$pairwise_results, row.names = FALSE)
+    }
+    
+    cat("\nalternative hypothesis:", x$alternative, "\n")
   }
   
-  cat("alternative hypothesis:", x$alternative, "\n")
-  if (!is.null(x$conf.int)) {
-    cl <- attr(x$conf.int, "conf.level")  # single predictor (htest convention)
-    if (is.null(cl)) cl <- x$conf.level    # multi predictor (stored directly)
-    cat(format(100 * cl), " percent confidence interval:\n")
-    cat(" ", format(x$conf.int[1], digits = 4), format(x$conf.int[2], digits = 4), "\n")
-  }
   cat("\n")
   invisible(x)
 }

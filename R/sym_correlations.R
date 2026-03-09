@@ -1,7 +1,7 @@
 #' Compute Spearman rho with no tie correction
 #' @param y_rank numeric vector of ranks
 #' @param x_rank numeric vector of ranks
-#' @return List with \code{rho} and \code{agc}.
+#' @return Spearman correlation without tie correction
 #' @keywords internal
 #' @noRd
 comp_spearman_rho_a <- function(y_rank, x_rank) {
@@ -15,7 +15,7 @@ comp_spearman_rho_a <- function(y_rank, x_rank) {
 #' Compute Spearman rho with tie correction
 #' @param y_rank numeric vector of ranks
 #' @param x_rank numeric vector of ranks
-#' @return List with \code{rho} and \code{agc}.
+#' @return Spearman correlation with tie correction
 #' @keywords internal
 #' @noRd
 comp_spearman_rho_b <- function(y_rank, x_rank) {
@@ -43,8 +43,8 @@ comp_pearson_rho <- function(x, y) {
 #' @noRd
 ind_variance_tau_a_iid <- function(X, Y) {
   N <- length(Y)
-  var_y_rank <- sum((rank(Y) - mean(rank(Y)))^2) / N
-  var_x_rank <- sum((rank(X) - mean(rank(X)))^2) / N
+  var_y_rank <- sum((rank(Y,ties.method = "average") - mean(rank(Y, ties.method = "average")))^2) / N
+  var_x_rank <- sum((rank(X, ties.method = "average") - mean(rank(X, ties.method = "average")))^2) / N
   zeta_3Y <- 1 - (12 / N^2) * var_y_rank
   zeta_3X <- 1 - (12 / N^2) * var_x_rank
   (4 / 9) * (1 - zeta_3X) * (1 - zeta_3Y)
@@ -88,6 +88,28 @@ ind_covariance_tau_a_iid <- function(X, Y) {
   Sigma_ind
 }
 
+
+#' Multivariate HAC independence covariance for tau-a
+#'
+#' @param X Numeric matrix (n x m).
+#' @param Y Numeric outcome vector.
+#' @return m x m independence covariance matrix with HAC correction.
+#' @keywords internal
+#' @noRd
+ind_covariance_tau_a_hac <- function(X, Y) {
+  N <- length(Y)
+  m <- ncol(X)
+  b <- floor(2 * N^(1/3))
+  
+  x_grades <- matrix(0, nrow = N, ncol = m)
+  for (k in seq_len(m)) {
+    x_grades[, k] <- (rank(X[, k], ties.method = "average") - 0.5) / N - 0.5
+  }
+  y_grade <- (rank(Y, ties.method = "average") - 0.5) / N - 0.5
+  
+  64 * ind_lrv_multivariate(x_grades, y_grade, N, b, x_by_row = FALSE)
+}
+
 #' Compute multivariate tau-a with covariance matrix
 #' @param X Numeric matrix (n x m).
 #' @param Y Numeric outcome vector.
@@ -119,7 +141,12 @@ compute_tau_a_multivariate_variance <- function(X, Y, IID = TRUE, version = "v2"
       4 * hac_correction_multivariate(K_tau_matrix)
   }
   
-  Sigma_ind <- ind_covariance_tau_a_iid(X, Y)
+  # FIX: dispatch based on IID flag
+  if (IID) {
+    Sigma_ind <- ind_covariance_tau_a_iid(X, Y)
+  } else {
+    Sigma_ind <- ind_covariance_tau_a_hac(X, Y)
+  }
   
   list(tau_a_vector = tau_vector, Sigma = Sigma, Sigma_ind = Sigma_ind)
 }
@@ -130,18 +157,9 @@ compute_tau_a_multivariate_variance <- function(X, Y, IID = TRUE, version = "v2"
 ind_variance_tau_a_hac <- function(X, Y) {
   N <- length(Y)
   b <- floor(2 * N^(1/3))
-  h_vec <- 1:(N - 1)
-  w <- pmax(1 - abs(h_vec) / (b + 1), 0)
-  
-  x_grade_centered <- (rank(X, ties.method = "average") - 0.5) / N - 0.5
-  y_grade_centered <- (rank(Y, ties.method = "average") - 0.5) / N - 0.5
-  
-  x_autoc <- stats::acf(x_grade_centered, plot = FALSE, type = "covariance",
-                        demean = FALSE, lag.max = N - 1)$acf
-  y_autoc <- stats::acf(y_grade_centered, plot = FALSE, type = "covariance",
-                        demean = FALSE, lag.max = N - 1)$acf
-  
-  64 * sum(x_autoc[1] * y_autoc[1], 2 * (w * x_autoc[-1] * y_autoc[-1]))
+  x_grade <- (rank(X, ties.method = "average") - 0.5) / N - 0.5
+  y_grade <- (rank(Y, ties.method = "average") - 0.5) / N - 0.5
+  64 * ind_lrv_univariate(x_grade, y_grade, N, b)
 }
 
 #' Compute tau-a with variance
@@ -187,19 +205,11 @@ ind_variance_rho_a_iid <- function(x_rank, N, zeta_3Y) {
 #' @keywords internal
 #' @noRd
 ind_variance_rho_a_hac <- function(x_rank, y_rank, N, b) {
-  h_vec <- 1:(N - 1)
-  w <- pmax(1 - abs(h_vec) / (b + 1), 0)
-  
-  x_grade_centered <- (x_rank - 0.5) / N - 0.5
-  y_grade_centered <- (y_rank - 0.5) / N - 0.5
-  
-  x_autoc <- stats::acf(x_grade_centered, plot = FALSE, type = "covariance",
-                        demean = FALSE, lag.max = N - 1)$acf
-  y_autoc <- stats::acf(y_grade_centered, plot = FALSE, type = "covariance",
-                        demean = FALSE, lag.max = N - 1)$acf
-  
-  144 * sum(x_autoc[1] * y_autoc[1], 2 * (w * x_autoc[-1] * y_autoc[-1]))
+  x_grade <- (x_rank - 0.5) / N - 0.5
+  y_grade <- (y_rank - 0.5) / N - 0.5
+  144 * ind_lrv_univariate(x_grade, y_grade, N, b)
 }
+
 
 #' Compute rho_a with variance
 #' @keywords internal
@@ -312,38 +322,12 @@ compute_rho_a_multivariate_variance <- function(y_rank, xarray_ranks, IID = TRUE
 #' @noRd
 ind_covariance_rho_a_hac <- function(xarray_ranks, y_rank, N, b) {
   k <- nrow(xarray_ranks)
-  
-  h_vec <- 1:(N - 1)
-  w <- pmax(1 - abs(h_vec) / (b + 1), 0)
-  
-  x_grades_centered <- matrix(0, nrow = k, ncol = N)
+
+  x_grades <- matrix(0, nrow = k, ncol = N)
   for (j in 1:k) {
-    x_grades_centered[j, ] <- (xarray_ranks[j, ] - 0.5) / N - 0.5
+    x_grades[j, ] <- (xarray_ranks[j, ] - 0.5) / N - 0.5
   }
-  y_grade_centered <- (y_rank - 0.5) / N - 0.5
-  
-  y_autoc <- stats::acf(y_grade_centered, plot = FALSE, type = "covariance",
-                        demean = FALSE, lag.max = N - 1)$acf
-  
-  Sigma_ind <- matrix(0, nrow = k, ncol = k)
-  for (j in 1:k) {
-    for (l in j:k) {
-      x_grade_j <- x_grades_centered[j, ]
-      x_grade_l <- x_grades_centered[l, ]
-      
-      xcov_0 <- mean(x_grade_j * x_grade_l)
-      hac_sum <- xcov_0 * y_autoc[1]
-      
-      for (h in seq_len(min(b, N - 1))) {
-        xcov_h <- mean(x_grade_j[1:(N - h)] * x_grade_l[(h + 1):N] +
-                         x_grade_j[(h + 1):N] * x_grade_l[1:(N - h)]) / 2
-        hac_sum <- hac_sum + 2 * w[h] * xcov_h * y_autoc[h + 1]
-      }
-      
-      Sigma_ind[j, l] <- 144 * hac_sum
-      if (j != l) Sigma_ind[l, j] <- Sigma_ind[j, l]
-    }
-  }
-  
-  Sigma_ind
+  y_grade <- (y_rank - 0.5) / N - 0.5
+
+  144 * ind_lrv_multivariate(x_grades, y_grade, N, b, x_by_row = TRUE)
 }
