@@ -5,10 +5,9 @@
 # Coverage gaps addressed:
 #   1. Univariate HAC via acor.test() public API (IID = FALSE)
 #   2. Multivariate HAC via acor.test() (IID = FALSE, m >= 2)
-#   3. HAC version consistency (original vs v2, original vs binary)
-#   4. Multivariate HAC version consistency
-#   5. Variance / n convergence as n grows
-#   6. Binary kernel dispatch: _binary path matches general path
+#   3. HAC version consistency (original helper kernels vs auto-dispatch)
+#   4. Multivariate HAC version consistency (original vs auto-dispatch)
+#   5. Binary kernel dispatch: auto-dispatch matches original for binary Y
 #
 # ============================================================================
 
@@ -286,42 +285,40 @@ test_that("m=2 HAC: chi-square equals z-squared", {
 
 
 # ============================================================================
-# Section 3: HAC version consistency (internal Sigma functions)
+# Section 3: HAC version consistency (original helper vs auto-dispatch)
 # ============================================================================
-# These test that original, v2, and binary HAC kernels give identical results.
+# These test that the original (O(n^2)) kernels in helper-original-kernels.R
+# give identical results to the optimized auto-dispatched functions.
 # Uses internal functions via acor:::.
 
-test_that("AKC univariate HAC: all versions agree (continuous)", {
+test_that("AKC univariate HAC: original vs auto-dispatch agree (continuous)", {
   set.seed(30001)
   n <- 200
   X <- rnorm(n)
   Y <- rnorm(n)
   
-  r_orig <- acor:::compute_akc_variance_auto(X, Y, IID = FALSE, version = "original")
-  r_v2   <- acor:::compute_akc_variance_auto(X, Y, IID = FALSE, version = "v2")
+  r_orig <- Sigma_akc_ts(X, Y)
+  r_auto <- acor:::compute_akc_variance_auto(X, Y, IID = FALSE)
   
-  expect_equal(r_v2$akc,     r_orig$akc,     tolerance = 1e-10)
-  expect_equal(r_v2$var,     r_orig$var,     tolerance = 1e-10)
-  expect_equal(r_v2$var_ind, r_orig$var_ind, tolerance = 1e-10)
+  expect_equal(r_auto$akc,     r_orig$akc,     tolerance = 1e-10)
+  expect_equal(r_auto$var,     r_orig$var,     tolerance = 1e-10)
+  expect_equal(r_auto$var_ind, r_orig$var_ind, tolerance = 1e-10)
 })
 
-test_that("AKC univariate HAC: all versions agree (discrete)", {
+test_that("AKC univariate HAC: original vs auto-dispatch agree (discrete)", {
   set.seed(30002)
   n <- 200
   X <- sample(1:10, n, replace = TRUE)
   Y <- sample(1:5, n, replace = TRUE)
   
-  r_orig <- acor:::compute_akc_variance_auto(X, Y, IID = FALSE, version = "original")
-  r_v1   <- acor:::compute_akc_variance_auto(X, Y, IID = FALSE, version = "v1")
-  r_v2   <- acor:::compute_akc_variance_auto(X, Y, IID = FALSE, version = "v2")
+  r_orig <- Sigma_akc_ts(X, Y)
+  r_auto <- acor:::compute_akc_variance_auto(X, Y, IID = FALSE)
   
-  expect_equal(r_v1$var,     r_orig$var,     tolerance = 1e-10)
-  expect_equal(r_v2$var,     r_orig$var,     tolerance = 1e-10)
-  expect_equal(r_v1$var_ind, r_orig$var_ind, tolerance = 1e-10)
-  expect_equal(r_v2$var_ind, r_orig$var_ind, tolerance = 1e-10)
+  expect_equal(r_auto$var,     r_orig$var,     tolerance = 1e-10)
+  expect_equal(r_auto$var_ind, r_orig$var_ind, tolerance = 1e-10)
 })
 
-test_that("AGC univariate HAC: original vs v2 agree (continuous)", {
+test_that("AGC univariate HAC: original vs auto-dispatch agree (continuous)", {
   set.seed(30003)
   n <- 200
   X <- rnorm(n)
@@ -330,14 +327,14 @@ test_that("AGC univariate HAC: original vs v2 agree (continuous)", {
   x_rank <- rank(X, ties.method = "average")
   
   r_orig <- Sigma_agc_ts(y_rank, x_rank)
-  r_v2   <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = FALSE)
+  r_auto <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = FALSE)
   
-  expect_equal(r_v2$agc,     r_orig$agc,     tolerance = 1e-10)
-  expect_equal(r_v2$var,     r_orig$var,     tolerance = 1e-10)
-  expect_equal(r_v2$var_ind, r_orig$var_ind, tolerance = 1e-10)
+  expect_equal(r_auto$agc,     r_orig$agc,     tolerance = 1e-10)
+  expect_equal(r_auto$var,     r_orig$var,     tolerance = 1e-10)
+  expect_equal(r_auto$var_ind, r_orig$var_ind, tolerance = 1e-10)
 })
 
-test_that("AGC univariate HAC: original vs v2 agree (discrete)", {
+test_that("AGC univariate HAC: original vs auto-dispatch agree (discrete)", {
   set.seed(30004)
   n <- 200
   X <- sample(1:10, n, replace = TRUE)
@@ -346,10 +343,10 @@ test_that("AGC univariate HAC: original vs v2 agree (discrete)", {
   x_rank <- rank(X, ties.method = "average")
   
   r_orig <- Sigma_agc_ts(y_rank, x_rank)
-  r_v2   <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = FALSE)
+  r_auto <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = FALSE)
   
-  expect_equal(r_v2$var,     r_orig$var,     tolerance = 1e-10)
-  expect_equal(r_v2$var_ind, r_orig$var_ind, tolerance = 1e-10)
+  expect_equal(r_auto$var,     r_orig$var,     tolerance = 1e-10)
+  expect_equal(r_auto$var_ind, r_orig$var_ind, tolerance = 1e-10)
 })
 
 
@@ -357,37 +354,34 @@ test_that("AGC univariate HAC: original vs v2 agree (discrete)", {
 # Section 4: Multivariate HAC version consistency
 # ============================================================================
 
-test_that("AKC multivariate HAC m=3: all versions agree (continuous)", {
+test_that("AKC multivariate HAC m=3: original vs auto-dispatch agree (continuous)", {
   set.seed(40001)
   n <- 200
   X <- matrix(rnorm(n * 3), ncol = 3)
   Y <- rnorm(n)
   
-  r_orig <- acor:::compute_akc_multivariate_variance_auto(X, Y, IID = FALSE, version = "original")
-  r_v2   <- acor:::compute_akc_multivariate_variance_auto(X, Y, IID = FALSE, version = "v2")
+  r_orig <- Sigma_akc_multivariate_ts(X, Y)
+  r_auto <- acor:::compute_akc_multivariate_variance_auto(X, Y, IID = FALSE)
   
-  expect_equal(r_v2$akc_vector, r_orig$akc_vector, tolerance = 1e-10)
-  expect_equal(r_v2$Sigma,      r_orig$Sigma,      tolerance = 1e-10)
-  expect_equal(r_v2$Sigma_ind,  r_orig$Sigma_ind,  tolerance = 1e-10)
+  expect_equal(r_auto$akc_vector, r_orig$akc_vector, tolerance = 1e-10)
+  expect_equal(r_auto$Sigma,      r_orig$Sigma,      tolerance = 1e-10)
+  expect_equal(r_auto$Sigma_ind,  r_orig$Sigma_ind,  tolerance = 1e-10)
 })
 
-test_that("AKC multivariate HAC m=3: all versions agree (discrete)", {
+test_that("AKC multivariate HAC m=3: original vs auto-dispatch agree (discrete)", {
   set.seed(40002)
   n <- 200
   X <- matrix(sample(1:10, n * 3, replace = TRUE), ncol = 3)
   Y <- sample(1:5, n, replace = TRUE)
   
-  r_orig <- acor:::compute_akc_multivariate_variance_auto(X, Y, IID = FALSE, version = "original")
-  r_v1   <- acor:::compute_akc_multivariate_variance_auto(X, Y, IID = FALSE, version = "v1")
-  r_v2   <- acor:::compute_akc_multivariate_variance_auto(X, Y, IID = FALSE, version = "v2")
+  r_orig <- Sigma_akc_multivariate_ts(X, Y)
+  r_auto <- acor:::compute_akc_multivariate_variance_auto(X, Y, IID = FALSE)
   
-  expect_equal(r_v1$Sigma,     r_orig$Sigma,     tolerance = 1e-10)
-  expect_equal(r_v2$Sigma,     r_orig$Sigma,     tolerance = 1e-10)
-  expect_equal(r_v1$Sigma_ind, r_orig$Sigma_ind, tolerance = 1e-10)
-  expect_equal(r_v2$Sigma_ind, r_orig$Sigma_ind, tolerance = 1e-10)
+  expect_equal(r_auto$Sigma,     r_orig$Sigma,     tolerance = 1e-10)
+  expect_equal(r_auto$Sigma_ind, r_orig$Sigma_ind, tolerance = 1e-10)
 })
 
-test_that("AGC multivariate HAC m=3: original vs v2 agree (continuous)", {
+test_that("AGC multivariate HAC m=3: original vs auto-dispatch agree (continuous)", {
   set.seed(40003)
   n <- 200
   X <- matrix(rnorm(n * 3), ncol = 3)
@@ -397,15 +391,15 @@ test_that("AGC multivariate HAC m=3: original vs v2 agree (continuous)", {
   for (j in 1:3) xarray_ranks[j, ] <- rank(X[, j], ties.method = "average")
   
   r_orig <- Sigma_agc_multivariate_ts(y_rank, xarray_ranks)
-  r_v2   <- acor:::compute_agc_multivariate_variance_auto(y_rank, xarray_ranks,
+  r_auto <- acor:::compute_agc_multivariate_variance_auto(y_rank, xarray_ranks,
                                                           IID = FALSE)
   
-  expect_equal(r_v2$agc_vector, r_orig$agc_vector, tolerance = 1e-10)
-  expect_equal(r_v2$Sigma,      r_orig$Sigma,      tolerance = 1e-10)
-  expect_equal(r_v2$Sigma_ind,  r_orig$Sigma_ind,  tolerance = 1e-10)
+  expect_equal(r_auto$agc_vector, r_orig$agc_vector, tolerance = 1e-10)
+  expect_equal(r_auto$Sigma,      r_orig$Sigma,      tolerance = 1e-10)
+  expect_equal(r_auto$Sigma_ind,  r_orig$Sigma_ind,  tolerance = 1e-10)
 })
 
-test_that("AGC multivariate HAC m=3: original vs v2 agree (binary Y)", {
+test_that("AGC multivariate HAC m=3: original vs auto-dispatch agree (binary Y)", {
   set.seed(40004)
   n <- 200
   X <- matrix(rnorm(n * 3), ncol = 3)
@@ -415,60 +409,60 @@ test_that("AGC multivariate HAC m=3: original vs v2 agree (binary Y)", {
   for (j in 1:3) xarray_ranks[j, ] <- rank(X[, j], ties.method = "average")
   
   r_orig <- Sigma_agc_multivariate_ts(y_rank, xarray_ranks)
-  r_v2   <- acor:::compute_agc_multivariate_variance_auto(y_rank, xarray_ranks,
+  r_auto <- acor:::compute_agc_multivariate_variance_auto(y_rank, xarray_ranks,
                                                           IID = FALSE)
   
-  expect_equal(r_v2$Sigma,     r_orig$Sigma,     tolerance = 1e-10)
-  expect_equal(r_v2$Sigma_ind, r_orig$Sigma_ind, tolerance = 1e-10)
+  expect_equal(r_auto$Sigma,     r_orig$Sigma,     tolerance = 1e-10)
+  expect_equal(r_auto$Sigma_ind, r_orig$Sigma_ind, tolerance = 1e-10)
 })
 
-test_that("AKC multivariate HAC m=5: original vs v2 agree", {
+test_that("AKC multivariate HAC m=5: original vs auto-dispatch agree", {
   set.seed(40005)
   n <- 200
   X <- matrix(rnorm(n * 5), ncol = 5)
   Y <- rnorm(n)
   
-  r_orig <- acor:::compute_akc_multivariate_variance_auto(X, Y, IID = FALSE, version = "original")
-  r_v2   <- acor:::compute_akc_multivariate_variance_auto(X, Y, IID = FALSE, version = "v2")
+  r_orig <- Sigma_akc_multivariate_ts(X, Y)
+  r_auto <- acor:::compute_akc_multivariate_variance_auto(X, Y, IID = FALSE)
   
-  expect_equal(r_v2$Sigma,     r_orig$Sigma,     tolerance = 1e-10)
-  expect_equal(r_v2$Sigma_ind, r_orig$Sigma_ind, tolerance = 1e-10)
+  expect_equal(r_auto$Sigma,     r_orig$Sigma,     tolerance = 1e-10)
+  expect_equal(r_auto$Sigma_ind, r_orig$Sigma_ind, tolerance = 1e-10)
 })
 
 
 # ============================================================================
-# Section 5: Binary kernel dispatch — binary path matches general path
+# Section 5: Binary kernel dispatch — auto-dispatch matches original for binary Y
 # ============================================================================
 
-test_that("AKC: binary kernel matches general kernel for binary Y (IID)", {
+test_that("AKC: binary auto-dispatch matches original kernel for binary Y (IID)", {
   set.seed(50001)
   n <- 200
   X <- rnorm(n)
   Y <- rbinom(n, 1, 0.6)
   
-  r_orig   <- acor:::compute_akc_variance_auto(X, Y, IID = TRUE, version = "original")
-  r_binary <- acor:::compute_akc_variance_auto(X, Y, IID = TRUE, version = "binary")
+  r_orig <- Sigma_akc(X, Y)
+  r_auto <- acor:::compute_akc_variance_auto(X, Y, IID = TRUE)
   
-  expect_equal(r_binary$akc,     r_orig$akc,     tolerance = 1e-10)
-  expect_equal(r_binary$var,     r_orig$var,     tolerance = 1e-10)
-  expect_equal(r_binary$var_ind, r_orig$var_ind, tolerance = 1e-10)
+  expect_equal(r_auto$akc,     r_orig$akc,     tolerance = 1e-10)
+  expect_equal(r_auto$var,     r_orig$var,     tolerance = 1e-10)
+  expect_equal(r_auto$var_ind, r_orig$var_ind, tolerance = 1e-10)
 })
 
-test_that("AKC: binary kernel matches general kernel for binary Y (HAC)", {
+test_that("AKC: binary auto-dispatch matches original kernel for binary Y (HAC)", {
   set.seed(50002)
   n <- 200
   X <- rnorm(n)
   Y <- rbinom(n, 1, 0.5)
   
-  r_orig   <- acor:::compute_akc_variance_auto(X, Y, IID = FALSE, version = "original")
-  r_binary <- acor:::compute_akc_variance_auto(X, Y, IID = FALSE, version = "binary")
+  r_orig <- Sigma_akc_ts(X, Y)
+  r_auto <- acor:::compute_akc_variance_auto(X, Y, IID = FALSE)
   
-  expect_equal(r_binary$akc,     r_orig$akc,     tolerance = 1e-10)
-  expect_equal(r_binary$var,     r_orig$var,     tolerance = 1e-10)
-  expect_equal(r_binary$var_ind, r_orig$var_ind, tolerance = 1e-10)
+  expect_equal(r_auto$akc,     r_orig$akc,     tolerance = 1e-10)
+  expect_equal(r_auto$var,     r_orig$var,     tolerance = 1e-10)
+  expect_equal(r_auto$var_ind, r_orig$var_ind, tolerance = 1e-10)
 })
 
-test_that("AGC: binary kernel matches general kernel for binary Y (IID)", {
+test_that("AGC: binary auto-dispatch matches original kernel for binary Y (IID)", {
   set.seed(50003)
   n <- 200
   X <- rnorm(n)
@@ -477,14 +471,14 @@ test_that("AGC: binary kernel matches general kernel for binary Y (IID)", {
   x_rank <- rank(X, ties.method = "average")
   
   r_orig   <- Sigma_agc(y_rank, x_rank)
-  r_binary <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = TRUE)
+  r_auto   <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = TRUE)
   
-  expect_equal(r_binary$agc,     r_orig$agc,     tolerance = 1e-10)
-  expect_equal(r_binary$var,     r_orig$var,     tolerance = 1e-10)
-  expect_equal(r_binary$var_ind, r_orig$var_ind, tolerance = 1e-10)
+  expect_equal(r_auto$agc,     r_orig$agc,     tolerance = 1e-10)
+  expect_equal(r_auto$var,     r_orig$var,     tolerance = 1e-10)
+  expect_equal(r_auto$var_ind, r_orig$var_ind, tolerance = 1e-10)
 })
 
-test_that("AGC: binary kernel matches general kernel for binary Y (HAC)", {
+test_that("AGC: binary auto-dispatch matches original kernel for binary Y (HAC)", {
   set.seed(50004)
   n <- 200
   X <- rnorm(n)
@@ -493,37 +487,37 @@ test_that("AGC: binary kernel matches general kernel for binary Y (HAC)", {
   x_rank <- rank(X, ties.method = "average")
   
   r_orig   <- Sigma_agc_ts(y_rank, x_rank)
-  r_binary <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = FALSE)
+  r_auto   <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = FALSE)
   
-  expect_equal(r_binary$agc,     r_orig$agc,     tolerance = 1e-10)
-  expect_equal(r_binary$var,     r_orig$var,     tolerance = 1e-10)
-  expect_equal(r_binary$var_ind, r_orig$var_ind, tolerance = 1e-10)
+  expect_equal(r_auto$agc,     r_orig$agc,     tolerance = 1e-10)
+  expect_equal(r_auto$var,     r_orig$var,     tolerance = 1e-10)
+  expect_equal(r_auto$var_ind, r_orig$var_ind, tolerance = 1e-10)
 })
 
-test_that("AKC multivariate: binary kernel matches general for binary Y (IID)", {
+test_that("AKC multivariate: binary auto-dispatch matches original for binary Y (IID)", {
   set.seed(50005)
   n <- 200
   X <- matrix(rnorm(n * 3), ncol = 3)
   Y <- rbinom(n, 1, 0.6)
   
-  r_orig   <- acor:::compute_akc_multivariate_variance_auto(X, Y, IID = TRUE, version = "original")
-  r_binary <- acor:::compute_akc_multivariate_variance_auto(X, Y, IID = TRUE, version = "binary")
+  r_orig <- Sigma_akc_multivariate(X, Y)
+  r_auto <- acor:::compute_akc_multivariate_variance_auto(X, Y, IID = TRUE)
   
-  expect_equal(r_binary$Sigma,     r_orig$Sigma,     tolerance = 1e-10)
-  expect_equal(r_binary$Sigma_ind, r_orig$Sigma_ind, tolerance = 1e-10)
+  expect_equal(r_auto$Sigma,     r_orig$Sigma,     tolerance = 1e-10)
+  expect_equal(r_auto$Sigma_ind, r_orig$Sigma_ind, tolerance = 1e-10)
 })
 
-test_that("AKC multivariate: binary kernel matches general for binary Y (HAC)", {
+test_that("AKC multivariate: binary auto-dispatch matches original for binary Y (HAC)", {
   set.seed(50006)
   n <- 200
   X <- matrix(rnorm(n * 3), ncol = 3)
   Y <- rbinom(n, 1, 0.5)
   
-  r_orig   <- acor:::compute_akc_multivariate_variance_auto(X, Y, IID = FALSE, version = "original")
-  r_binary <- acor:::compute_akc_multivariate_variance_auto(X, Y, IID = FALSE, version = "binary")
+  r_orig <- Sigma_akc_multivariate_ts(X, Y)
+  r_auto <- acor:::compute_akc_multivariate_variance_auto(X, Y, IID = FALSE)
   
-  expect_equal(r_binary$Sigma,     r_orig$Sigma,     tolerance = 1e-10)
-  expect_equal(r_binary$Sigma_ind, r_orig$Sigma_ind, tolerance = 1e-10)
+  expect_equal(r_auto$Sigma,     r_orig$Sigma,     tolerance = 1e-10)
+  expect_equal(r_auto$Sigma_ind, r_orig$Sigma_ind, tolerance = 1e-10)
 })
 
 

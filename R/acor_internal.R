@@ -30,6 +30,11 @@ validate_acor_inputs <- function(X, Y) {
   }
   if (any(is.na(X)) || any(is.na(Y))) stop("NA values not supported; remove NAs first")
   if (length(unique(Y)) < 2) stop("Y must have at least 2 distinct values")
+  for (k in seq_len(ncol(X))) {
+    if (length(unique(X[, k])) < 2) {
+      stop("Each column of X must have at least 2 distinct values")
+    }
+  }
   m <- ncol(X)
   list(X = X, Y = Y, n = n, m = m)
 }

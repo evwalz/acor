@@ -482,3 +482,30 @@ compute_akc_multivariate <- function(X, Y) {
 }
 
 
+compute_akc_variance_original <- function(X, Y, IID = TRUE) {
+  
+  # For v1 and v2, compute tau values first (shared across var and var_ind)
+  if (is_binary(Y)) {
+    tau_Y_result <- tau_Y_func_binary(Y)
+    akc_result   <- kendall_tau_sign_binary(X, Y)
+  } else {
+    tau_Y_result <- tau_Y_func(Y)
+    akc_result   <- kendall_tau_sign_cpp(X, Y)
+  }
+  
+  tau_Y  <- tau_Y_result$expectation
+  p_Y    <- tau_Y_result$p_tie_y
+  tau_XY <- akc_result$expectation
+  
+  if (1 - p_Y < 1e-10) {
+    stop("Y has near-total ties (nearly constant); ",
+         "AKC variance is undefined")
+  }
+  
+  if (IID) {
+    Sigma_akc(X, Y, tau_XY, tau_Y, p_Y)
+  } else {
+    Sigma_akc_ts(X, Y, tau_XY, tau_Y, p_Y)
+  }
+}
+

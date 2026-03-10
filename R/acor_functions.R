@@ -73,6 +73,7 @@ acor <- function(X, Y, method = c("pearson", "akc", "agc", "cid", "cma",
   m <- validated$m
   
   # Pre-compute Y ranks once for methods that need them
+  y_ranks <- NULL
   rank_methods <- c("agc", "cma", "rho_a", "rho_b")
   if (method %in% rank_methods) {
     y_ranks <- rank(Y, ties.method = "average")
@@ -134,7 +135,7 @@ print.acor <- function(x, ...) {
 #'   \item{alternative}{The alternative hypothesis}
 #'   \item{method}{The method used}
 #'   \item{conf.int}{Confidence interval}
-#'   \item{fisher}{Logical indicating if Fisher transformation was used}
+#'   \item{Fisher}{Logical indicating if Fisher transformation was used}
 #'   \item{IID}{Logical indicating if IID or time series assumptions were used}
 #'   
 #' @details
@@ -183,6 +184,10 @@ acor.test <- function(X, Y,
   m <- validated$m
   
   # Pre-compute ranks for methods that need them
+  xarray_ranks <- NULL
+  x_ranks <- NULL
+  y_ranks <- NULL
+  
   rank_methods <- c("agc", "cma", "rho_a")
   if (method %in% rank_methods) {
     y_ranks <- rank(Y, ties.method = "average")
@@ -574,8 +579,17 @@ print.acor_htest <- function(x, ...) {
       cat("statistic (ind) =", format(x$statistic_ind, digits = 4),
           ", p-value (ind) =", format.pval(x$p.value_ind), "\n")
     }
+    display_name <- switch(names(x$estimate),
+                           akc = "AKC", agc = "AGC", cid = "CID", cma = "CMA",
+                           tau_a = "tau-a", tau_b = "tau-b", tau_b_mod = "tau-b-mod",
+                           gamma = "gamma",
+                           rho_a = "rho-a", rho_b = "rho-b",
+                           pearson = "Pearson r",
+                           names(x$estimate)
+    )
+    
     cat("alternative hypothesis: true",
-        names(x$estimate), "is not equal to", x$null.value, "\n")
+        display_name, "is not equal to", x$null.value, "\n")
     if (!is.null(x$conf.int)) {
       cl <- attr(x$conf.int, "conf.level")
       cat(format(100 * cl), "percent confidence interval:\n")

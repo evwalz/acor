@@ -1,18 +1,18 @@
 # ============================================================================
-# Tests: Version Consistency and Runtime Benchmarking
+# Tests: AKC Kernel Consistency — Auto-dispatch vs Original Reference
 # ============================================================================
 #
 # Purpose:
-#   1. Verify that "original", "v1", and "v2" produce numerically identical
-#      estimates and variances across all data scenarios.
-#   2. Print runtimes to validate that the version selection heuristic makes
-#      sense:
-#        - v1  should be fastest for highly discrete / many-ties data
-#        - v2  should be fastest for large n continuous data
-#        - original is the O(n^2) baseline, expected fastest only for small n
+#   1. Verify that the auto-dispatched optimized kernels (v1/v2, selected
+#      internally by select_kernel_version()) produce numerically identical
+#      estimates and variances to the O(n^2) original reference kernels
+#      defined in helper-original-kernels.R.
+#   2. Print runtimes to validate that the optimized code is faster than
+#      the original reference.
 #
-# The internal dispatcher functions are called directly so that the version
-# can be forced, bypassing select_kernel_version().
+# The original (point-wise O(n^2)) kernels in helper-original-kernels.R
+# serve as the ground-truth reference. The auto-dispatched functions
+# are called without a version argument.
 #
 # ============================================================================
 
@@ -22,13 +22,13 @@ library(acor)
 # Tolerance for numerical equivalence across versions
 TOL <- 1e-10
 
-# Shorthand wrappers to force a specific version
-run_uni <- function(X, Y, version, IID = TRUE) {
-  acor:::compute_akc_variance_auto(X, Y, IID = IID, version = version)
+# Shorthand wrappers for auto-dispatched functions
+run_uni <- function(X, Y, IID = TRUE) {
+  acor:::compute_akc_variance_auto(X, Y, IID = IID)
 }
 
-run_mv <- function(X, Y, version, IID = TRUE) {
-  acor:::compute_akc_multivariate_variance_auto(X, Y, IID = IID, version = version)
+run_mv <- function(X, Y, IID = TRUE) {
+  acor:::compute_akc_multivariate_variance_auto(X, Y, IID = IID)
 }
 
 
@@ -36,89 +36,69 @@ run_mv <- function(X, Y, version, IID = TRUE) {
 # Section 1: Univariate IID
 # ============================================================================
 
-test_that("Uni IID | continuous X & Y: all versions agree", {
-
+test_that("Uni IID | continuous X & Y: auto-dispatch matches original", {
+  
   set.seed(101); n <- 300
   X <- rnorm(n); Y <- rnorm(n)
   
-  r_orig <- run_uni(X, Y, "original")
-  r_v1   <- run_uni(X, Y, "v1")
-  r_v2   <- run_uni(X, Y, "v2")
+  r_orig <- Sigma_akc(X, Y)
+  r_auto <- run_uni(X, Y)
   
-  expect_equal(r_v1$akc,     r_orig$akc,     tolerance = TOL)
-  expect_equal(r_v2$akc,     r_orig$akc,     tolerance = TOL)
-  expect_equal(r_v1$var,     r_orig$var,     tolerance = TOL)
-  expect_equal(r_v2$var,     r_orig$var,     tolerance = TOL)
-  expect_equal(r_v1$var_ind, r_orig$var_ind, tolerance = TOL)
-  expect_equal(r_v2$var_ind, r_orig$var_ind, tolerance = TOL)
+  expect_equal(r_auto$akc,     r_orig$akc,     tolerance = TOL)
+  expect_equal(r_auto$var,     r_orig$var,     tolerance = TOL)
+  expect_equal(r_auto$var_ind, r_orig$var_ind, tolerance = TOL)
 })
 
-test_that("Uni IID | binary Y: all versions agree", {
-
+test_that("Uni IID | binary Y: auto-dispatch matches original", {
+  
   set.seed(102); n <- 300
   X <- rnorm(n); Y <- rbinom(n, 1, 0.5)
   
-  r_orig <- run_uni(X, Y, "original")
-  r_v1   <- run_uni(X, Y, "v1")
-  r_v2   <- run_uni(X, Y, "v2")
+  r_orig <- Sigma_akc(X, Y)
+  r_auto <- run_uni(X, Y)
   
-  expect_equal(r_v1$akc,     r_orig$akc,     tolerance = TOL)
-  expect_equal(r_v2$akc,     r_orig$akc,     tolerance = TOL)
-  expect_equal(r_v1$var,     r_orig$var,     tolerance = TOL)
-  expect_equal(r_v2$var,     r_orig$var,     tolerance = TOL)
-  expect_equal(r_v1$var_ind, r_orig$var_ind, tolerance = TOL)
-  expect_equal(r_v2$var_ind, r_orig$var_ind, tolerance = TOL)
+  expect_equal(r_auto$akc,     r_orig$akc,     tolerance = TOL)
+  expect_equal(r_auto$var,     r_orig$var,     tolerance = TOL)
+  expect_equal(r_auto$var_ind, r_orig$var_ind, tolerance = TOL)
 })
 
-test_that("Uni IID | discrete X (10 levels), continuous Y: all versions agree", {
-
+test_that("Uni IID | discrete X (10 levels), continuous Y: auto-dispatch matches original", {
+  
   set.seed(103); n <- 300
   X <- sample(1:10, n, replace = TRUE); Y <- rnorm(n)
   
-  r_orig <- run_uni(X, Y, "original")
-  r_v1   <- run_uni(X, Y, "v1")
-  r_v2   <- run_uni(X, Y, "v2")
+  r_orig <- Sigma_akc(X, Y)
+  r_auto <- run_uni(X, Y)
   
-  expect_equal(r_v1$akc,     r_orig$akc,     tolerance = TOL)
-  expect_equal(r_v2$akc,     r_orig$akc,     tolerance = TOL)
-  expect_equal(r_v1$var,     r_orig$var,     tolerance = TOL)
-  expect_equal(r_v2$var,     r_orig$var,     tolerance = TOL)
-  expect_equal(r_v1$var_ind, r_orig$var_ind, tolerance = TOL)
-  expect_equal(r_v2$var_ind, r_orig$var_ind, tolerance = TOL)
+  expect_equal(r_auto$akc,     r_orig$akc,     tolerance = TOL)
+  expect_equal(r_auto$var,     r_orig$var,     tolerance = TOL)
+  expect_equal(r_auto$var_ind, r_orig$var_ind, tolerance = TOL)
 })
 
-test_that("Uni IID | discrete X (5 levels) & discrete Y (3 levels): all versions agree", {
-
+test_that("Uni IID | discrete X (5 levels) & discrete Y (3 levels): auto-dispatch matches original", {
+  
   set.seed(104); n <- 300
   X <- sample(1:5, n, replace = TRUE); Y <- sample(1:3, n, replace = TRUE)
   
-  r_orig <- run_uni(X, Y, "original")
-  r_v1   <- run_uni(X, Y, "v1")
-  r_v2   <- run_uni(X, Y, "v2")
+  r_orig <- Sigma_akc(X, Y)
+  r_auto <- run_uni(X, Y)
   
-  expect_equal(r_v1$akc,     r_orig$akc,     tolerance = TOL)
-  expect_equal(r_v2$akc,     r_orig$akc,     tolerance = TOL)
-  expect_equal(r_v1$var,     r_orig$var,     tolerance = TOL)
-  expect_equal(r_v2$var,     r_orig$var,     tolerance = TOL)
-  expect_equal(r_v1$var_ind, r_orig$var_ind, tolerance = TOL)
-  expect_equal(r_v2$var_ind, r_orig$var_ind, tolerance = TOL)
+  expect_equal(r_auto$akc,     r_orig$akc,     tolerance = TOL)
+  expect_equal(r_auto$var,     r_orig$var,     tolerance = TOL)
+  expect_equal(r_auto$var_ind, r_orig$var_ind, tolerance = TOL)
 })
 
-test_that("Uni IID | heavy ties in X (~25%): all versions agree", {
-
+test_that("Uni IID | heavy ties in X (~25%): auto-dispatch matches original", {
+  
   set.seed(105); n <- 300
   X <- rnorm(n); X[seq(1, n, by = 4)] <- X[1]; Y <- rnorm(n)
   
-  r_orig <- run_uni(X, Y, "original")
-  r_v1   <- run_uni(X, Y, "v1")
-  r_v2   <- run_uni(X, Y, "v2")
+  r_orig <- Sigma_akc(X, Y)
+  r_auto <- run_uni(X, Y)
   
-  expect_equal(r_v1$akc,     r_orig$akc,     tolerance = TOL)
-  expect_equal(r_v2$akc,     r_orig$akc,     tolerance = TOL)
-  expect_equal(r_v1$var,     r_orig$var,     tolerance = TOL)
-  expect_equal(r_v2$var,     r_orig$var,     tolerance = TOL)
-  expect_equal(r_v1$var_ind, r_orig$var_ind, tolerance = TOL)
-  expect_equal(r_v2$var_ind, r_orig$var_ind, tolerance = TOL)
+  expect_equal(r_auto$akc,     r_orig$akc,     tolerance = TOL)
+  expect_equal(r_auto$var,     r_orig$var,     tolerance = TOL)
+  expect_equal(r_auto$var_ind, r_orig$var_ind, tolerance = TOL)
 })
 
 
@@ -126,54 +106,42 @@ test_that("Uni IID | heavy ties in X (~25%): all versions agree", {
 # Section 2: Univariate HAC
 # ============================================================================
 
-test_that("Uni HAC | continuous X & Y: all versions agree", {
-
+test_that("Uni HAC | continuous X & Y: auto-dispatch matches original", {
+  
   set.seed(201); n <- 300
   X <- rnorm(n); Y <- rnorm(n)
   
-  r_orig <- run_uni(X, Y, "original", IID = FALSE)
-  r_v1   <- run_uni(X, Y, "v1",       IID = FALSE)
-  r_v2   <- run_uni(X, Y, "v2",       IID = FALSE)
+  r_orig <- Sigma_akc_ts(X, Y)
+  r_auto <- run_uni(X, Y, IID = FALSE)
   
-  expect_equal(r_v1$akc,     r_orig$akc,     tolerance = TOL)
-  expect_equal(r_v2$akc,     r_orig$akc,     tolerance = TOL)
-  expect_equal(r_v1$var,     r_orig$var,     tolerance = TOL)
-  expect_equal(r_v2$var,     r_orig$var,     tolerance = TOL)
-  expect_equal(r_v1$var_ind, r_orig$var_ind, tolerance = TOL)
-  expect_equal(r_v2$var_ind, r_orig$var_ind, tolerance = TOL)
+  expect_equal(r_auto$akc,     r_orig$akc,     tolerance = TOL)
+  expect_equal(r_auto$var,     r_orig$var,     tolerance = TOL)
+  expect_equal(r_auto$var_ind, r_orig$var_ind, tolerance = TOL)
 })
 
-test_that("Uni HAC | binary Y: all versions agree", {
+test_that("Uni HAC | binary Y: auto-dispatch matches original", {
   set.seed(202); n <- 300
   X <- rnorm(n); Y <- rbinom(n, 1, 0.6)
   
-  r_orig <- run_uni(X, Y, "original", IID = FALSE)
-  r_v1   <- run_uni(X, Y, "v1",       IID = FALSE)
-  r_v2   <- run_uni(X, Y, "v2",       IID = FALSE)
+  r_orig <- Sigma_akc_ts(X, Y)
+  r_auto <- run_uni(X, Y, IID = FALSE)
   
-  expect_equal(r_v1$akc,     r_orig$akc,     tolerance = TOL)
-  expect_equal(r_v2$akc,     r_orig$akc,     tolerance = TOL)
-  expect_equal(r_v1$var,     r_orig$var,     tolerance = TOL)
-  expect_equal(r_v2$var,     r_orig$var,     tolerance = TOL)
-  expect_equal(r_v1$var_ind, r_orig$var_ind, tolerance = TOL)
-  expect_equal(r_v2$var_ind, r_orig$var_ind, tolerance = TOL)
+  expect_equal(r_auto$akc,     r_orig$akc,     tolerance = TOL)
+  expect_equal(r_auto$var,     r_orig$var,     tolerance = TOL)
+  expect_equal(r_auto$var_ind, r_orig$var_ind, tolerance = TOL)
 })
 
-test_that("Uni HAC | discrete X (10) & Y (5): all versions agree", {
+test_that("Uni HAC | discrete X (10) & Y (5): auto-dispatch matches original", {
   skip_on_cran()
   set.seed(203); n <- 300
   X <- sample(1:10, n, replace = TRUE); Y <- sample(1:5, n, replace = TRUE)
   
-  r_orig <- run_uni(X, Y, "original", IID = FALSE)
-  r_v1   <- run_uni(X, Y, "v1",       IID = FALSE)
-  r_v2   <- run_uni(X, Y, "v2",       IID = FALSE)
+  r_orig <- Sigma_akc_ts(X, Y)
+  r_auto <- run_uni(X, Y, IID = FALSE)
   
-  expect_equal(r_v1$akc,     r_orig$akc,     tolerance = TOL)
-  expect_equal(r_v2$akc,     r_orig$akc,     tolerance = TOL)
-  expect_equal(r_v1$var,     r_orig$var,     tolerance = TOL)
-  expect_equal(r_v2$var,     r_orig$var,     tolerance = TOL)
-  expect_equal(r_v1$var_ind, r_orig$var_ind, tolerance = TOL)
-  expect_equal(r_v2$var_ind, r_orig$var_ind, tolerance = TOL)
+  expect_equal(r_auto$akc,     r_orig$akc,     tolerance = TOL)
+  expect_equal(r_auto$var,     r_orig$var,     tolerance = TOL)
+  expect_equal(r_auto$var_ind, r_orig$var_ind, tolerance = TOL)
 })
 
 
@@ -181,53 +149,41 @@ test_that("Uni HAC | discrete X (10) & Y (5): all versions agree", {
 # Section 3: Multivariate IID (m = 3)
 # ============================================================================
 
-test_that("MV IID m=3 | continuous X & Y: all versions agree", {
+test_that("MV IID m=3 | continuous X & Y: auto-dispatch matches original", {
   set.seed(301); n <- 300
   X <- matrix(rnorm(n * 3), ncol = 3); Y <- rnorm(n)
   
-  r_orig <- run_mv(X, Y, "original")
-  r_v1   <- run_mv(X, Y, "v1")
-  r_v2   <- run_mv(X, Y, "v2")
+  r_orig <- Sigma_akc_multivariate(X, Y)
+  r_auto <- run_mv(X, Y)
   
-  expect_equal(r_v1$akc_vector, r_orig$akc_vector, tolerance = TOL)
-  expect_equal(r_v2$akc_vector, r_orig$akc_vector, tolerance = TOL)
-  expect_equal(r_v1$Sigma,      r_orig$Sigma,      tolerance = TOL)
-  expect_equal(r_v2$Sigma,      r_orig$Sigma,      tolerance = TOL)
-  expect_equal(r_v1$Sigma_ind,  r_orig$Sigma_ind,  tolerance = TOL)
-  expect_equal(r_v2$Sigma_ind,  r_orig$Sigma_ind,  tolerance = TOL)
+  expect_equal(r_auto$akc_vector, r_orig$akc_vector, tolerance = TOL)
+  expect_equal(r_auto$Sigma,      r_orig$Sigma,      tolerance = TOL)
+  expect_equal(r_auto$Sigma_ind,  r_orig$Sigma_ind,  tolerance = TOL)
 })
 
-test_that("MV IID m=3 | binary Y: all versions agree", {
+test_that("MV IID m=3 | binary Y: auto-dispatch matches original", {
   set.seed(302); n <- 300
   X <- matrix(rnorm(n * 3), ncol = 3); Y <- rbinom(n, 1, 0.5)
   
-  r_orig <- run_mv(X, Y, "original")
-  r_v1   <- run_mv(X, Y, "v1")
-  r_v2   <- run_mv(X, Y, "v2")
+  r_orig <- Sigma_akc_multivariate(X, Y)
+  r_auto <- run_mv(X, Y)
   
-  expect_equal(r_v1$akc_vector, r_orig$akc_vector, tolerance = TOL)
-  expect_equal(r_v2$akc_vector, r_orig$akc_vector, tolerance = TOL)
-  expect_equal(r_v1$Sigma,      r_orig$Sigma,      tolerance = TOL)
-  expect_equal(r_v2$Sigma,      r_orig$Sigma,      tolerance = TOL)
-  expect_equal(r_v1$Sigma_ind,  r_orig$Sigma_ind,  tolerance = TOL)
-  expect_equal(r_v2$Sigma_ind,  r_orig$Sigma_ind,  tolerance = TOL)
+  expect_equal(r_auto$akc_vector, r_orig$akc_vector, tolerance = TOL)
+  expect_equal(r_auto$Sigma,      r_orig$Sigma,      tolerance = TOL)
+  expect_equal(r_auto$Sigma_ind,  r_orig$Sigma_ind,  tolerance = TOL)
 })
 
-test_that("MV IID m=3 | discrete X (10) & Y (5): all versions agree", {
+test_that("MV IID m=3 | discrete X (10) & Y (5): auto-dispatch matches original", {
   set.seed(303); n <- 300
   X <- matrix(sample(1:10, n * 3, replace = TRUE), ncol = 3)
   Y <- sample(1:5, n, replace = TRUE)
   
-  r_orig <- run_mv(X, Y, "original")
-  r_v1   <- run_mv(X, Y, "v1")
-  r_v2   <- run_mv(X, Y, "v2")
+  r_orig <- Sigma_akc_multivariate(X, Y)
+  r_auto <- run_mv(X, Y)
   
-  expect_equal(r_v1$akc_vector, r_orig$akc_vector, tolerance = TOL)
-  expect_equal(r_v2$akc_vector, r_orig$akc_vector, tolerance = TOL)
-  expect_equal(r_v1$Sigma,      r_orig$Sigma,      tolerance = TOL)
-  expect_equal(r_v2$Sigma,      r_orig$Sigma,      tolerance = TOL)
-  expect_equal(r_v1$Sigma_ind,  r_orig$Sigma_ind,  tolerance = TOL)
-  expect_equal(r_v2$Sigma_ind,  r_orig$Sigma_ind,  tolerance = TOL)
+  expect_equal(r_auto$akc_vector, r_orig$akc_vector, tolerance = TOL)
+  expect_equal(r_auto$Sigma,      r_orig$Sigma,      tolerance = TOL)
+  expect_equal(r_auto$Sigma_ind,  r_orig$Sigma_ind,  tolerance = TOL)
 })
 
 
@@ -235,55 +191,43 @@ test_that("MV IID m=3 | discrete X (10) & Y (5): all versions agree", {
 # Section 4: Multivariate HAC (m = 3)
 # ============================================================================
 
-test_that("MV HAC m=3 | continuous X & Y: all versions agree", {
+test_that("MV HAC m=3 | continuous X & Y: auto-dispatch matches original", {
   set.seed(401); n <- 300
   X <- matrix(rnorm(n * 3), ncol = 3); Y <- rnorm(n)
   
-  r_orig <- run_mv(X, Y, "original", IID = FALSE)
-  r_v1   <- run_mv(X, Y, "v1",       IID = FALSE)
-  r_v2   <- run_mv(X, Y, "v2",       IID = FALSE)
+  r_orig <- Sigma_akc_multivariate_ts(X, Y)
+  r_auto <- run_mv(X, Y, IID = FALSE)
   
-  expect_equal(r_v1$akc_vector, r_orig$akc_vector, tolerance = TOL)
-  expect_equal(r_v2$akc_vector, r_orig$akc_vector, tolerance = TOL)
-  expect_equal(r_v1$Sigma,      r_orig$Sigma,      tolerance = TOL)
-  expect_equal(r_v2$Sigma,      r_orig$Sigma,      tolerance = TOL)
-  expect_equal(r_v1$Sigma_ind,  r_orig$Sigma_ind,  tolerance = TOL)
-  expect_equal(r_v2$Sigma_ind,  r_orig$Sigma_ind,  tolerance = TOL)
+  expect_equal(r_auto$akc_vector, r_orig$akc_vector, tolerance = TOL)
+  expect_equal(r_auto$Sigma,      r_orig$Sigma,      tolerance = TOL)
+  expect_equal(r_auto$Sigma_ind,  r_orig$Sigma_ind,  tolerance = TOL)
 })
 
-test_that("MV HAC m=3 | binary Y: all versions agree", {
+test_that("MV HAC m=3 | binary Y: auto-dispatch matches original", {
   skip_on_cran()
   set.seed(402); n <- 300
   X <- matrix(rnorm(n * 3), ncol = 3); Y <- rbinom(n, 1, 0.6)
   
-  r_orig <- run_mv(X, Y, "original", IID = FALSE)
-  r_v1   <- run_mv(X, Y, "v1",       IID = FALSE)
-  r_v2   <- run_mv(X, Y, "v2",       IID = FALSE)
+  r_orig <- Sigma_akc_multivariate_ts(X, Y)
+  r_auto <- run_mv(X, Y, IID = FALSE)
   
-  expect_equal(r_v1$akc_vector, r_orig$akc_vector, tolerance = TOL)
-  expect_equal(r_v2$akc_vector, r_orig$akc_vector, tolerance = TOL)
-  expect_equal(r_v1$Sigma,      r_orig$Sigma,      tolerance = TOL)
-  expect_equal(r_v2$Sigma,      r_orig$Sigma,      tolerance = TOL)
-  expect_equal(r_v1$Sigma_ind,  r_orig$Sigma_ind,  tolerance = TOL)
-  expect_equal(r_v2$Sigma_ind,  r_orig$Sigma_ind,  tolerance = TOL)
+  expect_equal(r_auto$akc_vector, r_orig$akc_vector, tolerance = TOL)
+  expect_equal(r_auto$Sigma,      r_orig$Sigma,      tolerance = TOL)
+  expect_equal(r_auto$Sigma_ind,  r_orig$Sigma_ind,  tolerance = TOL)
 })
 
-test_that("MV HAC m=3 | discrete X (10) & Y (5): all versions agree", {
+test_that("MV HAC m=3 | discrete X (10) & Y (5): auto-dispatch matches original", {
   skip_on_cran()
   set.seed(403); n <- 300
   X <- matrix(sample(1:10, n * 3, replace = TRUE), ncol = 3)
   Y <- sample(1:5, n, replace = TRUE)
   
-  r_orig <- run_mv(X, Y, "original", IID = FALSE)
-  r_v1   <- run_mv(X, Y, "v1",       IID = FALSE)
-  r_v2   <- run_mv(X, Y, "v2",       IID = FALSE)
+  r_orig <- Sigma_akc_multivariate_ts(X, Y)
+  r_auto <- run_mv(X, Y, IID = FALSE)
   
-  expect_equal(r_v1$akc_vector, r_orig$akc_vector, tolerance = TOL)
-  expect_equal(r_v2$akc_vector, r_orig$akc_vector, tolerance = TOL)
-  expect_equal(r_v1$Sigma,      r_orig$Sigma,      tolerance = TOL)
-  expect_equal(r_v2$Sigma,      r_orig$Sigma,      tolerance = TOL)
-  expect_equal(r_v1$Sigma_ind,  r_orig$Sigma_ind,  tolerance = TOL)
-  expect_equal(r_v2$Sigma_ind,  r_orig$Sigma_ind,  tolerance = TOL)
+  expect_equal(r_auto$akc_vector, r_orig$akc_vector, tolerance = TOL)
+  expect_equal(r_auto$Sigma,      r_orig$Sigma,      tolerance = TOL)
+  expect_equal(r_auto$Sigma_ind,  r_orig$Sigma_ind,  tolerance = TOL)
 })
 
 
@@ -291,12 +235,11 @@ test_that("MV HAC m=3 | discrete X (10) & Y (5): all versions agree", {
 # Section 5: Runtime benchmarks
 # ============================================================================
 # Not testthat assertions — prints a formatted table of median runtimes.
-# Run interactively or via Rscript to validate version selection heuristic.
+# Run interactively to compare auto-dispatched (optimized) vs original.
 #
 # Expected pattern:
-#   - "original" fastest at small n continuous (but O(n^2) kills it for large n)
-#   - "v1" fastest whenever data is discrete or binary Y
-#   - "v2" fastest at large n continuous (n > ~4000)
+#   - Auto-dispatched should be faster or equal for all scenarios
+#   - Advantage grows with n (original is O(n^2))
 # ============================================================================
 
 run_benchmarks <- function(reps = 5) {
@@ -307,7 +250,6 @@ run_benchmarks <- function(reps = 5) {
   
   # ---- Scenario definitions ------------------------------------------------
   scenarios <- list(
-    # --- Continuous data: watches original degrade vs v2 improving with n ---
     list(label = "n=200,   continuous",     seed = 501, n = 200,
          gen_X = function(n) rnorm(n),
          gen_Y = function(n) rnorm(n)),
@@ -324,11 +266,6 @@ run_benchmarks <- function(reps = 5) {
          gen_X = function(n) rnorm(n),
          gen_Y = function(n) rnorm(n)),
     
-    #list(label = "n=10000, continuous",     seed = 505, n = 10000,
-    #     gen_X = function(n) rnorm(n),
-    #     gen_Y = function(n) rnorm(n)),
-    
-    # --- Binary Y: v1 should dominate across all n -------------------------
     list(label = "n=200,   binary Y",       seed = 506, n = 200,
          gen_X = function(n) rnorm(n),
          gen_Y = function(n) rbinom(n, 1, 0.5)),
@@ -341,7 +278,6 @@ run_benchmarks <- function(reps = 5) {
          gen_X = function(n) rnorm(n),
          gen_Y = function(n) rbinom(n, 1, 0.5)),
     
-    # --- Discrete X: v1 advantage from tie structure -----------------------
     list(label = "n=500,   discrete X (10 lv)", seed = 509, n = 500,
          gen_X = function(n) sample(1:10, n, replace = TRUE),
          gen_Y = function(n) rnorm(n)),
@@ -354,20 +290,20 @@ run_benchmarks <- function(reps = 5) {
          gen_X = function(n) sample(1:10, n, replace = TRUE),
          gen_Y = function(n) sample(1:5, n, replace = TRUE)),
     
-    list(label = "n=10000,  discrete X+Y (10x5)", seed = 511, n = 10000,
+    list(label = "n=10000, discrete X+Y (10x5)", seed = 511, n = 10000,
          gen_X = function(n) sample(1:10, n, replace = TRUE),
          gen_Y = function(n) sample(1:5, n, replace = TRUE))
   )
   
   # ---- Print header --------------------------------------------------------
   cat("\n")
-  cat(strrep("=", 78), "\n")
-  cat("  Runtime Benchmarks: original vs v1 vs v2  (IID, univariate)\n")
+  cat(strrep("=", 70), "\n")
+  cat("  Runtime Benchmarks: original (O(n^2)) vs auto-dispatch (IID, univariate)\n")
   cat(sprintf("  Median of %d replications — times in seconds\n", reps))
-  cat(strrep("=", 78), "\n")
-  cat(sprintf("  %-32s  %-10s  %8s  %8s  %8s\n",
-              "Scenario", "selected", "original", "v1", "v2"))
-  cat(strrep("-", 78), "\n")
+  cat(strrep("=", 70), "\n")
+  cat(sprintf("  %-32s  %-10s  %8s  %8s\n",
+              "Scenario", "selected", "original", "auto"))
+  cat(strrep("-", 70), "\n")
   
   for (sc in scenarios) {
     set.seed(sc$seed)
@@ -376,21 +312,14 @@ run_benchmarks <- function(reps = 5) {
     
     selected <- acor:::select_kernel_version(Y, X)
     
-    t_orig <- time_med(function() run_uni(X, Y, "original"), reps)
-    t_v1   <- time_med(function() run_uni(X, Y, "v1"),       reps)
-    t_v2   <- time_med(function() run_uni(X, Y, "v2"),       reps)
+    t_orig <- time_med(function() Sigma_akc(X, Y), reps)
+    t_auto <- time_med(function() run_uni(X, Y), reps)
     
-    # Mark the selected version with an asterisk
-    orig_str <- if (selected == "original") sprintf("%7.4f*", t_orig) else sprintf("%8.4f",  t_orig)
-    v1_str   <- if (selected == "v1")       sprintf("%7.4f*", t_v1)   else sprintf("%8.4f",  t_v1)
-    v2_str   <- if (selected == "v2")       sprintf("%7.4f*", t_v2)   else sprintf("%8.4f",  t_v2)
-    
-    cat(sprintf("  %-32s  %-10s  %s  %s  %s\n",
-                sc$label, selected, orig_str, v1_str, v2_str))
+    cat(sprintf("  %-32s  %-10s  %8.4f  %8.4f\n",
+                sc$label, selected, t_orig, t_auto))
   }
   
-  cat(strrep("-", 78), "\n")
-  cat("  * = version that would be selected by select_kernel_version()\n\n")
+  cat(strrep("-", 70), "\n\n")
   
   
   # ---- Multivariate section ------------------------------------------------
@@ -420,13 +349,13 @@ run_benchmarks <- function(reps = 5) {
          gen_Y = function(n) rnorm(n))
   )
   
-  cat(strrep("=", 78), "\n")
-  cat("  Runtime Benchmarks: original vs v1 vs v2  (IID, multivariate)\n")
+  cat(strrep("=", 70), "\n")
+  cat("  Runtime Benchmarks: original vs auto-dispatch (IID, multivariate)\n")
   cat(sprintf("  Median of %d replications — times in seconds\n", reps))
-  cat(strrep("=", 78), "\n")
-  cat(sprintf("  %-32s  %-10s  %8s  %8s  %8s\n",
-              "Scenario", "selected", "original", "v1", "v2"))
-  cat(strrep("-", 78), "\n")
+  cat(strrep("=", 70), "\n")
+  cat(sprintf("  %-32s  %-10s  %8s  %8s\n",
+              "Scenario", "selected", "original", "auto"))
+  cat(strrep("-", 70), "\n")
   
   for (sc in mv_scenarios) {
     set.seed(sc$seed)
@@ -435,28 +364,23 @@ run_benchmarks <- function(reps = 5) {
     
     selected <- acor:::select_kernel_version(Y, X)
     
-    t_orig <- time_med(function() run_mv(X, Y, "original"), reps)
-    t_v1   <- time_med(function() run_mv(X, Y, "v1"),       reps)
-    t_v2   <- time_med(function() run_mv(X, Y, "v2"),       reps)
+    t_orig <- time_med(function() Sigma_akc_multivariate(X, Y), reps)
+    t_auto <- time_med(function() run_mv(X, Y), reps)
     
-    orig_str <- if (selected == "original") sprintf("%7.4f*", t_orig) else sprintf("%8.4f",  t_orig)
-    v1_str   <- if (selected == "v1")       sprintf("%7.4f*", t_v1)   else sprintf("%8.4f",  t_v1)
-    v2_str   <- if (selected == "v2")       sprintf("%7.4f*", t_v2)   else sprintf("%8.4f",  t_v2)
-    
-    cat(sprintf("  %-32s  %-10s  %s  %s  %s\n",
-                sc$label, selected, orig_str, v1_str, v2_str))
+    cat(sprintf("  %-32s  %-10s  %8.4f  %8.4f\n",
+                sc$label, selected, t_orig, t_auto))
   }
   
-  cat(strrep("-", 78), "\n")
-  cat("  * = version that would be selected by select_kernel_version()\n\n")
+  cat(strrep("-", 70), "\n\n")
   
   invisible(NULL)
 }
 
 # Run benchmarks when script is sourced directly (not during testthat)
-if (interactive() && identical(Sys.getenv("RUN_BENCHMARKS"), "1")) {
-  run_benchmarks()
-}
+
+#if (interactive() && identical(Sys.getenv("RUN_BENCHMARKS"), "1")) {
+run_benchmarks()
+#}
 
 
 # ============================================================================
@@ -464,7 +388,7 @@ if (interactive() && identical(Sys.getenv("RUN_BENCHMARKS"), "1")) {
 # ============================================================================
 # Compares wall-clock time of acor.test() (AKC and AGC) against:
 #   - pROC::roc() + pROC::var()     for binary Y   (DeLong)
-#   - cor.test(method="spearman")   for continuous Y
+#   - survival::concordance()       for continuous/discrete Y
 #
 # The AKC kernel version selected by select_kernel_version() is printed
 # alongside each scenario so you can see which code path is exercised.
@@ -481,11 +405,8 @@ run_acor_benchmarks <- function(reps = 5) {
   }
   
   # ---- Scenario definitions ------------------------------------------------
-  # Discretisation levels for X (NA = continuous rnorm)
-  # Y type: "binary", "continuous", or integer = number of discrete levels
   scenarios <- list(
     
-    # --- Binary Y: acor.test vs DeLong -------------------------------------
     list(label = "n=200,  binary Y,  cont X",
          seed = 701, n = 200,  Y_type = "binary",
          X_levels = NA),
@@ -510,7 +431,6 @@ run_acor_benchmarks <- function(reps = 5) {
          seed = 706, n = 2000, Y_type = "binary",
          X_levels = 10),
     
-    # --- Continuous Y: acor.test vs cor.test(spearman) --------------------
     list(label = "n=200,  cont Y,    cont X",
          seed = 711, n = 200,  Y_type = "continuous",
          X_levels = NA),
@@ -527,7 +447,6 @@ run_acor_benchmarks <- function(reps = 5) {
          seed = 714, n = 5000, Y_type = "continuous",
          X_levels = NA),
     
-    # --- Discrete X: acor.test vs cor.test(spearman) ----------------------
     list(label = "n=500,  cont Y,    disc X (10 lv)",
          seed = 721, n = 500,  Y_type = "continuous",
          X_levels = 10),
@@ -540,7 +459,6 @@ run_acor_benchmarks <- function(reps = 5) {
          seed = 723, n = 2000, Y_type = "continuous",
          X_levels = 10),
     
-    # --- Discrete Y: acor.test (no direct reference) ----------------------
     list(label = "n=500,  disc Y (5 lv),  cont X",
          seed = 731, n = 500,  Y_type = 5,
          X_levels = NA),
@@ -571,10 +489,8 @@ run_acor_benchmarks <- function(reps = 5) {
     set.seed(sc$seed)
     n <- sc$n
     
-    # Generate X
     X <- if (is.na(sc$X_levels)) rnorm(n) else sample(seq_len(sc$X_levels), n, replace = TRUE)
     
-    # Generate Y and determine reference method
     if (sc$Y_type == "binary") {
       Y          <- rbinom(n, 1, 0.5)
       ref_method <- "DeLong"
@@ -584,20 +500,16 @@ run_acor_benchmarks <- function(reps = 5) {
       ref_method <- "concordance"
       can_ref    <- TRUE
     } else {
-      # discrete Y
       Y          <- sample(seq_len(sc$Y_type), n, replace = TRUE)
       ref_method <- "concordance"
       can_ref    <- TRUE
     }
     
-    # AKC version that will be selected
     akc_ver <- acor:::select_kernel_version(Y, X)
     
-    # Time acor.test
     t_akc <- time_med(function() acor.test(X, Y, method = "akc"), reps)
     t_agc <- time_med(function() acor.test(X, Y, method = "agc"), reps)
     
-    # Time reference
     if (!can_ref) {
       t_ref <- NA_real_
     } else if (ref_method == "DeLong") {
@@ -606,7 +518,6 @@ run_acor_benchmarks <- function(reps = 5) {
         pROC::var(roc_obj)
       }, reps)
     } else {
-      # survival::concordance handles continuous, discrete, and binary Y
       t_ref <- time_med(function() survival::concordance(Y ~ X), reps)
     }
     
@@ -628,6 +539,6 @@ run_acor_benchmarks <- function(reps = 5) {
 }
 
 # Run both benchmark sets when script is sourced directly
-if (interactive() && identical(Sys.getenv("RUN_BENCHMARKS"), "1")) {
-  run_acor_benchmarks()
-}
+#if (interactive() && identical(Sys.getenv("RUN_BENCHMARKS"), "1")) {
+run_acor_benchmarks()
+#}

@@ -291,8 +291,11 @@ compute_rho_a_multivariate_variance <- function(y_rank, xarray_ranks, IID = TRUE
   
   Sigma_iid <- 9 * (kps %*% t(kps)) / N
   
+  pre <- agc_y_preamble(y_rank)
+  
   if (IID) {
     Sigma <- Sigma_iid
+    Sigma_ind <- ind_covariance_rho_a_iid(xarray_ranks, N, pre$zeta_3Y)
   } else {
     b <- floor(2 * N^(1/3))
     Sigma_hac <- matrix(0, nrow = k, ncol = k)
@@ -304,13 +307,6 @@ compute_rho_a_multivariate_variance <- function(y_rank, xarray_ranks, IID = TRUE
       Sigma_hac <- Sigma_hac + omega * autocov_h
     }
     Sigma <- Sigma_iid + 9 * Sigma_hac
-  }
-  
-  pre <- agc_y_preamble(y_rank)
-  if (IID) {
-    Sigma_ind <- ind_covariance_rho_a_iid(xarray_ranks, N, pre$zeta_3Y)
-  } else {
-    b <- floor(2 * N^(1/3))
     Sigma_ind <- ind_covariance_rho_a_hac(xarray_ranks, y_rank, N, b)
   }
   
