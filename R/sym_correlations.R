@@ -331,3 +331,6 @@ ind_covariance_rho_a_hac <- function(xarray_ranks, y_rank, N, b) {
 
   144 * ind_lrv_multivariate(x_grades, y_grade, N, b, x_by_row = TRUE)
 }
+
+
+

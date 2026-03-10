@@ -476,7 +476,7 @@ test_that("rho_a variance approximately equals AGC variance when no ties (IID)",
   y_rank <- rank(Y, ties.method = "average")
   
   result_rho <- acor:::compute_rho_a_variance(x_rank, y_rank, IID = TRUE)
-  result_agc <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = TRUE, version = "v2")
+  result_agc <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = TRUE)
   
   expect_equal(result_rho$rho_a, result_agc$agc, tolerance = 1e-3)
   expect_equal(result_rho$var, result_agc$var, tolerance = 1e-3)
@@ -493,7 +493,7 @@ test_that("rho_a variance approximately equals AGC variance when no ties (HAC)",
   y_rank <- rank(Y, ties.method = "average")
   
   result_rho <- acor:::compute_rho_a_variance(x_rank, y_rank, IID = FALSE)
-  result_agc <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = FALSE, version = "v2")
+  result_agc <- acor:::compute_agc_variance_auto(y_rank, x_rank, IID = FALSE)
   
   expect_equal(result_rho$rho_a, result_agc$agc, tolerance = 1e-3)
   expect_equal(result_rho$var, result_agc$var, tolerance = 1e-3)
@@ -631,3 +631,5 @@ test_that("acor.test works for rho_a multiple predictors", {
   expect_length(result$estimate, 2)
   expect_true(is.numeric(result$p.value))
 })
+
+
