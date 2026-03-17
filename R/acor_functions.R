@@ -6,8 +6,9 @@
 
 #' Compute Correlation Coefficients
 #' 
-#' @param X Predictor variable (vector or matrix for multiple predictors)
-#' @param Y Outcome variable (vector)
+#' @param X Predictor variable, supplied either as a numeric vector or as a
+#'   numeric matrix with one predictor per column.
+#' @param Y Numeric outcome vector.
 #' @param method Character string specifying the method:
 #'   "akc", "agc", "cid", "cma",
 #'   "tau_a", "tau_b", "tau_b_mod",
@@ -15,9 +16,10 @@
 #'   "rho_a", "rho_b",
 #'   "pearson"
 #'   
-#' @return A list containing:
-#'   \item{estimate}{Vector of correlation estimates}
-#'   \item{method}{The method used}
+#' @return An object of class `"acor"` with components:
+#'   \item{estimate}{A numeric vector of correlation estimates, one per column
+#'   of `X`.}
+#'   \item{method}{The method used.}
 #'   
 #' @details
 #' Asymmetric measures (directional, Y is the outcome):
@@ -44,7 +46,9 @@
 #' CID and CMA range from 0 to 1 (with 0.5 = independence).
 #' All other measures range from -1 to 1 (with 0 = independence).
 #' 
-#' For multiple predictors, X should be a matrix with predictors as columns
+#' For multiple predictors, `X` should be a matrix with predictors in columns.
+#' The returned `estimate` vector follows the column order of `X`.
+#' Method `"tau_b_mod"` requires at least 3 observations.
 #' 
 #' @examples
 #' # Single predictor
@@ -71,6 +75,9 @@ acor <- function(X, Y, method = c("pearson", "akc", "agc", "cid", "cma",
   Y <- validated$Y
   n <- validated$n
   m <- validated$m
+  if (method == "tau_b_mod" && n < 3) {
+    stop("Method 'tau_b_mod' requires at least 3 observations")
+  }
   
   # Pre-compute Y ranks once for methods that need them
   y_ranks <- NULL
@@ -115,34 +122,51 @@ print.acor <- function(x, ...) {
 
 #' Statistical Test for Asymmetric Correlation
 #' 
-#' @param X Predictor variable (vector) or two predictors (matrix with 2 columns) to compare
-#' @param Y Outcome variable (vector)
-#' @param method Character string specifying the method: "akc", "agc", "cid", "cma" or "tau_a"
+#' @param X Predictor variable, supplied either as a numeric vector or as a
+#'   numeric matrix with one or more predictor columns.
+#' @param Y Numeric outcome vector.
+#' @param method Character string specifying the method: `"akc"`, `"agc"`,
+#'   `"cid"`, `"cma"`, `"tau_a"`, or `"rho_a"`.
 #' @param alternative Character string specifying the alternative hypothesis:
 #'   * `"two.sided"` (default): tests if correlation differs from null value
 #'   * `"greater"`: tests if correlation is greater than null value
 #'   * `"less"`: tests if correlation is less than null value
-#' @param conf.level Confidence level (default 0.95)
-#' @param fisher Logical; if TRUE, uses Fisher transformation for confidence interval.
-#' @param IID Logical; if FALSE inference performed under time series assumptions and thus HAC variance estimator is computed 
+#' @param conf.level Confidence level for confidence intervals. Must be a single
+#'   number strictly between 0 and 1.
+#' @param fisher Logical; if `TRUE`, uses a Fisher transformation when
+#'   constructing confidence intervals.
+#' @param IID Logical; if `FALSE`, inference is performed under time-series
+#'   assumptions and a HAC variance estimator is used.
 #' 
-#' @return A list containing:
-#'   \item{statistic}{The test statistic (z-score)}
-#'   \item{p.value}{The p-value for the test}
-#'   \item{estimate}{The correlation estimate(s)}
-#'   \item{variance}{The variance of the estimate(s)}
-#'   \item{conf.level}{Confidence level}
-#'   \item{alternative}{The alternative hypothesis}
-#'   \item{method}{The method used}
-#'   \item{conf.int}{Confidence interval}
-#'   \item{Fisher}{Logical indicating if Fisher transformation was used}
-#'   \item{IID}{Logical indicating if IID or time series assumptions were used}
+#' @return An object of class `"acor_htest"`. For a single predictor, the
+#'   result also inherits from `"htest"` and contains the estimate, its
+#'   asymptotic variance, z-statistics and p-values under both the main and
+#'   independence variance formulas, a confidence interval, the null value, and
+#'   metadata such as `alternative`, `method`, `data.name`, `Fisher`, and
+#'   `IID`.
+#'
+#'   For multiple predictors, the result contains a global chi-squared test of
+#'   equality across predictors together with predictor-specific results in
+#'   `results`, pairwise differences in `pairwise_results`, the covariance
+#'   matrices `variance` and `variance_ind`, the contrast matrix used for the
+#'   comparisons, and metadata such as `alternative`, `method`, `conf.level`,
+#'   and `IID`.
 #'   
 #' @details
-#' For a single predictor X, tests H0: correlation = null.value
-#' For two predictors (X with 2 columns), tests H0: correlation(X1,Y) = correlation(X2,Y)
+#' For a single predictor `X`, the null hypothesis is `H0: correlation =
+#' null.value`.
+#'
+#' For multiple predictors (matrix `X`), the global null hypothesis is that all
+#' predictor-specific correlations with `Y` are equal. The returned object also
+#' includes individual predictor tests against the method-specific null value and
+#' all pairwise differences between predictors.
+#'
+#' In the multivariate case, `alternative` affects the individual predictor
+#' tests and pairwise differences. The top-level equality test remains a
+#' chi-squared test of equality across predictors.
 #' 
 #' The test uses asymptotic normality of the correlation estimators.
+#' At least 3 observations are required.
 #' 
 #' Independence null values:
 #' - AKC, AGC: H0: correlation = 0
@@ -157,11 +181,12 @@ print.acor <- function(x, ...) {
 #' # Test if CMA differs from 0.5 (independence test)
 #' test_result <- acor.test(x, y, method = "cma", alternative = "two.sided")
 #' 
-#' # Compare two predictors
+#' # Compare multiple predictors
 #' x1 <- rnorm(100)
 #' x2 <- rnorm(100)
+#' x3 <- rnorm(100)
 #' y <- rnorm(100)
-#' X <- cbind(x1, x2)
+#' X <- cbind(x1, x2, x3)
 #' test_result <- acor.test(X, y, method = "akc")
 #' 
 #' @export
@@ -176,12 +201,19 @@ acor.test <- function(X, Y,
   dname <- paste(deparse(substitute(X)), "and", deparse(substitute(Y)))
   method <- match.arg(method)
   alternative <- match.arg(alternative)
+  if (!is.numeric(conf.level) || length(conf.level) != 1 || is.na(conf.level) ||
+      conf.level <= 0 || conf.level >= 1) {
+    stop("'conf.level' must be a single number between 0 and 1")
+  }
 
   validated <- validate_acor_inputs(X, Y)
   X <- validated$X
   Y <- validated$Y
   n <- validated$n
   m <- validated$m
+  if (n < 3) {
+    stop("At least 3 observations are required")
+  }
   
   # Pre-compute ranks for methods that need them
   xarray_ranks <- NULL
@@ -510,7 +542,14 @@ acor.test <- function(X, Y,
       }
     }
     
+    zero_tol <- sqrt(.Machine$double.eps)
     z_diff <- est_diff / se_diff
+    zero_var <- se_diff <= zero_tol
+    if (any(zero_var)) {
+      z_diff[zero_var & abs(est_diff) <= zero_tol] <- 0
+      z_diff[zero_var & est_diff > zero_tol] <- Inf
+      z_diff[zero_var & est_diff < -zero_tol] <- -Inf
+    }
     
     if (alternative == "two.sided") {
       p_diff <- 2 * (1 - stats::pnorm(abs(z_diff)))
@@ -588,8 +627,12 @@ print.acor_htest <- function(x, ...) {
                            names(x$estimate)
     )
     
+    alt_text <- switch(x$alternative,
+                       two.sided = "is not equal to",
+                       greater = "is greater than",
+                       less = "is less than")
     cat("alternative hypothesis: true",
-        display_name, "is not equal to", x$null.value, "\n")
+        display_name, alt_text, x$null.value, "\n")
     if (!is.null(x$conf.int)) {
       cl <- attr(x$conf.int, "conf.level")
       cat(format(100 * cl), "percent confidence interval:\n")

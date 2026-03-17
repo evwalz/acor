@@ -4,6 +4,10 @@
 ^\\.Ruserdata$
 ^README\\.Rmd$
 ^LICENSE\\.md$
+^\\.DS_Store$
+^.*\\/\\.DS_Store$
+^\\.git$
+^\\.\\.Rcheck$
 
 ^.*\.Rproj$
 ^\.Rproj\.user$

@@ -119,7 +119,8 @@ agc_iid_variance <- function(k_p, k_zeta, rho, zeta_3Y, sigma_zeta) {
 #' @noRd
 agc_hac_C_zeta <- function(k_zeta, b, N) {
   C_zeta_hac <- 0
-  for (h in 1:b) {
+  max_lag <- min(b, N - 1)
+  for (h in seq_len(max_lag)) {
     omega <- 1 - h / (b + 1)
     c_k <- sum(k_zeta[1:(N - h)] * k_zeta[(h + 1):N])
     C_zeta_hac <- C_zeta_hac + omega * (2 / N) * c_k
@@ -139,8 +140,9 @@ agc_hac_C_zeta <- function(k_zeta, b, N) {
 agc_hac_univariate_terms <- function(k_p, k_zeta, b, N) {
   A_spear <- 0
   B_both <- 0
+  max_lag <- min(b, N - 1)
   
-  for (h in 1:b) {
+  for (h in seq_len(max_lag)) {
     omega <- 1 - h / (b + 1)
     K1_lag  <- k_p[1:(N - h)]
     K1_lead <- k_p[(h + 1):N]
@@ -171,8 +173,9 @@ agc_hac_offdiag_terms <- function(k_p1, k_p2, k_zeta, b, N) {
   A2_spear <- 0
   B_one <- 0
   B_two <- 0
+  max_lag <- min(b, N - 1)
   
-  for (h in 1:b) {
+  for (h in seq_len(max_lag)) {
     omega <- 1 - h / (b + 1)
     kp1_lag  <- k_p1[1:(N - h)]
     kp1_lead <- k_p1[(h + 1):N]

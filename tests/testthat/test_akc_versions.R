@@ -379,7 +379,7 @@ run_benchmarks <- function(reps = 5) {
 # Run benchmarks when script is sourced directly (not during testthat)
 
 #if (interactive() && identical(Sys.getenv("RUN_BENCHMARKS"), "1")) {
-run_benchmarks()
+#run_benchmarks()
 #}
 
 
@@ -540,5 +540,5 @@ run_acor_benchmarks <- function(reps = 5) {
 
 # Run both benchmark sets when script is sourced directly
 #if (interactive() && identical(Sys.getenv("RUN_BENCHMARKS"), "1")) {
-run_acor_benchmarks()
+#run_acor_benchmarks()
 #}

@@ -10,3 +10,5 @@ src/*.dll
 src/RcppExports.cpp
 /doc/
 /Meta/
+*.tar.gz
+*.Rcheck/

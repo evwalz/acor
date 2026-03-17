@@ -41,9 +41,19 @@ test_that("acor() rejects non-numeric Y", {
                "numeric vector")
 })
 
+test_that("acor() rejects multi-column Y data frames", {
+  y <- data.frame(a = 1:5, b = 5:1)
+  expect_error(acor(1:5, y, method = "akc"), "multi-column data frame")
+})
+
 test_that("acor() works with n = 2 (minimum valid)", {
   result <- acor(c(1, 2), c(3, 4), method = "akc")
   expect_true(is.finite(result$estimate))
+})
+
+test_that("acor() rejects tau_b_mod for n < 3", {
+  expect_error(acor(c(1, 2), c(2, 1), method = "tau_b_mod"),
+               "at least 3 observations")
 })
 
 test_that("acor() works with n = 3", {
@@ -70,6 +80,28 @@ test_that("acor.test() rejects NA in data", {
   y <- rnorm(20)
   x[7] <- NA
   expect_error(acor.test(x, y, method = "akc"), "NA")
+})
+
+test_that("acor.test() rejects multi-column Y data frames", {
+  y <- data.frame(a = 1:5, b = 5:1)
+  expect_error(acor.test(1:5, y, method = "akc"), "multi-column data frame")
+})
+
+test_that("acor.test() requires at least 3 observations", {
+  expect_error(acor.test(c(1, 2), c(1, 2), method = "akc"),
+               "At least 3 observations")
+})
+
+test_that("acor.test() rejects invalid conf.level", {
+  expect_error(acor.test(rnorm(20), rnorm(20), method = "akc", conf.level = 2),
+               "conf.level")
+})
+
+test_that("acor.test() rejects HAC inference with fewer than 3 observations", {
+  expect_error(acor.test(c(1, 2), c(1, 2), method = "akc", IID = FALSE),
+               "At least 3 observations")
+  expect_error(acor.test(cbind(c(1, 2), c(2, 1)), c(1, 2), method = "rho_a", IID = FALSE),
+               "At least 3 observations")
 })
 
 # ============================================================================
@@ -186,6 +218,13 @@ test_that("print.acor_htest works for m = 1 without error", {
   expect_output(print(res), "statistic")
 })
 
+test_that("print.acor_htest shows the correct one-sided alternative", {
+  x <- 1:10
+  y <- 10:1
+  res <- acor.test(x, y, method = "akc", alternative = "less")
+  expect_output(print(res), "is less than")
+})
+
 test_that("print.acor_htest works for m >= 2 without error", {
   set.seed(6002)
   y <- rnorm(50)
@@ -217,6 +256,17 @@ test_that("m >= 2 object is acor_htest but not htest", {
   res <- acor.test(X, y, method = "akc")
   expect_s3_class(res, "acor_htest")
   expect_false(inherits(res, "htest"))
+})
+
+test_that("identical predictor columns give zero pairwise statistic and p-value 1", {
+  set.seed(6006)
+  y <- rnorm(40)
+  x <- rnorm(40)
+  X <- cbind(x, x)
+  res <- acor.test(X, y, method = "akc")
+  expect_equal(res$pairwise_results$difference, 0)
+  expect_equal(res$pairwise_results$statistic, 0)
+  expect_equal(res$pairwise_results$p.value, 1)
 })
 
 # ============================================================================

@@ -12,9 +12,10 @@ acor(
 )
 }
 \arguments{
-\item{X}{Predictor variable (vector or matrix for multiple predictors)}
+\item{X}{Predictor variable, supplied either as a numeric vector or as a
+numeric matrix with one predictor per column.}
 
-\item{Y}{Outcome variable (vector)}
+\item{Y}{Numeric outcome vector.}
 
 \item{method}{Character string specifying the method:
 "akc", "agc", "cid", "cma",
@@ -24,9 +25,10 @@ acor(
 "pearson"}
 }
 \value{
-A list containing:
-\item{estimate}{Vector of correlation estimates}
-\item{method}{The method used}
+An object of class \code{"acor"} with components:
+\item{estimate}{A numeric vector of correlation estimates, one per column
+of \code{X}.}
+\item{method}{The method used.}
 }
 \description{
 Compute Correlation Coefficients
@@ -66,7 +68,9 @@ Pearson correlation (symmetric):
 CID and CMA range from 0 to 1 (with 0.5 = independence).
 All other measures range from -1 to 1 (with 0 = independence).
 
-For multiple predictors, X should be a matrix with predictors as columns
+For multiple predictors, \code{X} should be a matrix with predictors in columns.
+The returned \code{estimate} vector follows the column order of \code{X}.
+Method \code{"tau_b_mod"} requires at least 3 observations.
 }
 \examples{
 # Single predictor

@@ -1,8 +1,8 @@
 ---
-title: "introduction"
+title: "Introduction to acor"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{introduction}
+  %\VignetteIndexEntry{Introduction to acor}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -17,3 +17,105 @@ knitr::opts_chunk$set(
 ```{r setup}
 library(acor)
 ```
+
+## Overview
+
+`acor` provides asymmetric correlation measures for settings where `Y` is the
+outcome and `X` is a predictor. The package also includes several familiar
+symmetric correlation measures so that directional and non-directional analyses
+can be compared in one interface.
+
+The main entry points are:
+
+- `acor()` to compute correlation estimates
+- `acor.test()` to perform asymptotic inference
+
+## Available measures
+
+The asymmetric measures are:
+
+- `akc`: Asymmetric Kendall Correlation
+- `cid`: Concordance-Discordance Index, equal to `(AKC + 1) / 2`
+- `agc`: Asymmetric Grade Correlation
+- `cma`: Coefficient of Monotone Association, equal to `(AGC + 1) / 2`
+
+For `akc` and `agc`, independence corresponds to `0`. For `cid` and `cma`,
+independence corresponds to `0.5`.
+
+The package also supports symmetric measures:
+
+- `tau_a`, `tau_b`, `tau_b_mod`
+- `gamma`
+- `rho_a`, `rho_b`
+- `pearson`
+
+## Basic usage
+
+```{r}
+set.seed(1)
+x <- rnorm(100)
+y <- 0.6 * x + rnorm(100)
+
+acor(x, y, method = "akc")
+acor(x, y, method = "cid")
+acor(x, y, method = "pearson")
+```
+
+## Hypothesis tests
+
+`acor.test()` performs asymptotic inference for `akc`, `agc`, `cid`, `cma`,
+`tau_a`, and `rho_a`.
+
+```{r}
+set.seed(2)
+x <- rnorm(120)
+y <- 0.5 * x + rnorm(120)
+
+acor.test(x, y, method = "akc")
+acor.test(x, y, method = "cma", alternative = "greater")
+```
+
+By default, inference is performed under IID assumptions. For
+time series, set `IID = FALSE` to use a HAC variance estimator.
+
+```{r}
+set.seed(3)
+n <- 120
+x <- cumsum(rnorm(n))
+y <- 0.3 * x + cumsum(rnorm(n))
+
+acor.test(x, y, method = "agc", IID = FALSE)
+```
+
+## Multiple predictors
+
+If `X` is a matrix, `acor()` returns one estimate per column. For
+`acor.test()`, the null hypothesis is that all predictor-specific correlations
+with `Y` are equal.
+
+```{r}
+set.seed(4)
+y <- rnorm(150)
+X <- cbind(
+  x1 = y + rnorm(150, sd = 0.4),
+  x2 = 0.5 * y + rnorm(150, sd = 0.8),
+  x3 = rnorm(150)
+)
+
+acor(X, y, method = "agc")
+
+fit <- acor.test(X, y, method = "akc")
+fit
+fit$results
+fit$pairwise_results
+```
+
+## Interpretation
+
+The asymmetric measures are directional: exchanging `X` and `Y` generally
+changes the result. This is most useful when the analyst wants to quantify the
+association of one or more predictors with a designated outcome.
+
+The rescaled measures `cid` and `cma` may be easier to interpret in some
+applications because they lie on `[0, 1]`, whereas `akc` and `agc` lie on
+`[-1, 1]`.

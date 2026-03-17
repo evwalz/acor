@@ -53,8 +53,9 @@ hac_correction_univariate <- function(adjusted_K) {
   n <- length(adjusted_K)
   b <- floor(2 * n^(1 / 3))
   correction <- 0
+  max_lag <- min(b, n - 1)
   
-  for (h in seq_len(b)) {
+  for (h in seq_len(max_lag)) {
     omega <- 1 - h / (b + 1)
     autocov_h <- (2 / n) * sum(adjusted_K[1:(n - h)] * adjusted_K[(h + 1):n])
     correction <- correction + omega * autocov_h
@@ -74,8 +75,9 @@ hac_correction_multivariate <- function(adjusted_K_tau) {
   m <- ncol(adjusted_K_tau)
   b <- floor(2 * n^(1 / 3))
   Sigma_hac <- matrix(0, nrow = m, ncol = m)
+  max_lag <- min(b, n - 1)
   
-  for (h in seq_len(b)) {
+  for (h in seq_len(max_lag)) {
     omega <- 1 - h / (b + 1)
     K_lag  <- adjusted_K_tau[1:(n - h), , drop = FALSE]
     K_lead <- adjusted_K_tau[(h + 1):n, , drop = FALSE]

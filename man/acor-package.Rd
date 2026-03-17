@@ -22,4 +22,3 @@ Useful links:
 \strong{Maintainer}: Eva-Maria Walz \email{evamaria.walz@gmx.de}
 
 }
-\keyword{internal}

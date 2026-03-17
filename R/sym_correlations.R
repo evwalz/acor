@@ -31,7 +31,6 @@ comp_spearman_rho_b <- function(y_rank, x_rank) {
 #' @keywords internal
 #' @noRd
 comp_pearson_rho <- function(x, y) {
-  n <- length(x)
   mx <- mean(x)
   my <- mean(y)
   sum((x - mx) * (y - my)) / sqrt(sum((x - mx)^2) * sum((y - my)^2))
@@ -299,7 +298,8 @@ compute_rho_a_multivariate_variance <- function(y_rank, xarray_ranks, IID = TRUE
   } else {
     b <- floor(2 * N^(1/3))
     Sigma_hac <- matrix(0, nrow = k, ncol = k)
-    for (h in 1:b) {
+    max_lag <- min(b, N - 1)
+    for (h in seq_len(max_lag)) {
       omega <- 1 - h / (b + 1)
       K_lag <- t(kps[, 1:(N - h), drop = FALSE])
       K_lead <- t(kps[, (h + 1):N, drop = FALSE])

@@ -15,11 +15,13 @@ acor.test(
 )
 }
 \arguments{
-\item{X}{Predictor variable (vector) or two predictors (matrix with 2 columns) to compare}
+\item{X}{Predictor variable, supplied either as a numeric vector or as a
+numeric matrix with one or more predictor columns.}
 
-\item{Y}{Outcome variable (vector)}
+\item{Y}{Numeric outcome vector.}
 
-\item{method}{Character string specifying the method: "akc", "agc", "cid", "cma" or "tau_a"}
+\item{method}{Character string specifying the method: \code{"akc"}, \code{"agc"},
+\code{"cid"}, \code{"cma"}, \code{"tau_a"}, or \code{"rho_a"}.}
 
 \item{alternative}{Character string specifying the alternative hypothesis:
 \itemize{
@@ -28,33 +30,47 @@ acor.test(
 \item \code{"less"}: tests if correlation is less than null value
 }}
 
-\item{conf.level}{Confidence level (default 0.95)}
+\item{conf.level}{Confidence level for confidence intervals. Must be a single
+number strictly between 0 and 1.}
 
-\item{fisher}{Logical; if TRUE, uses Fisher transformation for confidence interval.}
+\item{fisher}{Logical; if \code{TRUE}, uses a Fisher transformation when
+constructing confidence intervals.}
 
-\item{IID}{Logical; if FALSE inference performed under time series assumptions and thus HAC variance estimator is computed}
+\item{IID}{Logical; if \code{FALSE}, inference is performed under time-series
+assumptions and a HAC variance estimator is used.}
 }
 \value{
-A list containing:
-\item{statistic}{The test statistic (z-score)}
-\item{p.value}{The p-value for the test}
-\item{estimate}{The correlation estimate(s)}
-\item{variance}{The variance of the estimate(s)}
-\item{conf.level}{Confidence level}
-\item{alternative}{The alternative hypothesis}
-\item{method}{The method used}
-\item{conf.int}{Confidence interval}
-\item{fisher}{Logical indicating if Fisher transformation was used}
-\item{IID}{Logical indicating if IID or time series assumptions were used}
+An object of class \code{"acor_htest"}. For a single predictor, the
+result also inherits from \code{"htest"} and contains the estimate, its
+asymptotic variance, z-statistics and p-values under both the main and
+independence variance formulas, a confidence interval, the null value, and
+metadata such as \code{alternative}, \code{method}, \code{data.name}, \code{Fisher}, and
+\code{IID}.
+
+For multiple predictors, the result contains a global chi-squared test of
+equality across predictors together with predictor-specific results in
+\code{results}, pairwise differences in \code{pairwise_results}, the covariance
+matrices \code{variance} and \code{variance_ind}, the contrast matrix used for the
+comparisons, and metadata such as \code{alternative}, \code{method}, \code{conf.level},
+and \code{IID}.
 }
 \description{
 Statistical Test for Asymmetric Correlation
 }
 \details{
-For a single predictor X, tests H0: correlation = null.value
-For two predictors (X with 2 columns), tests H0: correlation(X1,Y) = correlation(X2,Y)
+For a single predictor \code{X}, the null hypothesis is \code{H0: correlation = null.value}.
+
+For multiple predictors (matrix \code{X}), the global null hypothesis is that all
+predictor-specific correlations with \code{Y} are equal. The returned object also
+includes individual predictor tests against the method-specific null value and
+all pairwise differences between predictors.
+
+In the multivariate case, \code{alternative} affects the individual predictor
+tests and pairwise differences. The top-level equality test remains a
+chi-squared test of equality across predictors.
 
 The test uses asymptotic normality of the correlation estimators.
+At least 3 observations are required.
 
 Independence null values:
 \itemize{
@@ -71,11 +87,12 @@ test_result <- acor.test(x, y, method = "akc", alternative = "two.sided")
 # Test if CMA differs from 0.5 (independence test)
 test_result <- acor.test(x, y, method = "cma", alternative = "two.sided")
 
-# Compare two predictors
+# Compare multiple predictors
 x1 <- rnorm(100)
 x2 <- rnorm(100)
+x3 <- rnorm(100)
 y <- rnorm(100)
-X <- cbind(x1, x2)
+X <- cbind(x1, x2, x3)
 test_result <- acor.test(X, y, method = "akc")
 
 }

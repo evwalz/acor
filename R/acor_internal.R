@@ -9,8 +9,11 @@
 #' @return List with validated X (matrix), Y, n, m
 #' @keywords internal
 #' @noRd
-validate_acor_inputs <- function(X, Y) {
-  if (is.data.frame(Y)) Y <- as.numeric(Y[[1]])
+validate_acor_inputs <- function(X, Y, min_n = 2L) {
+  if (is.data.frame(Y)) {
+    if (ncol(Y) != 1) stop("Y must be a numeric vector, not a multi-column data frame")
+    Y <- as.numeric(Y[[1]])
+  }
   if (is.data.frame(X)) X <- as.matrix(X)
   
   if (!is.numeric(Y) || !is.vector(Y)) {
@@ -25,6 +28,9 @@ validate_acor_inputs <- function(X, Y) {
   }
   
   n <- length(Y)
+  if (n < min_n) {
+    stop("At least ", min_n, " observations are required")
+  }
   if (nrow(X) != n) {
     stop("X and Y must have the same number of observations")
   }
@@ -52,7 +58,6 @@ validate_acor_inputs <- function(X, Y) {
 #' @keywords internal
 #' @noRd
 select_kernel_version <- function(Y, X) {
-  n <- length(Y)
   M <- length(unique(Y))
   
   if (M == 2) {
