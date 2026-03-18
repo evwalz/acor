@@ -227,31 +227,313 @@ test_that("comp_pearson_rho handles perfect negative correlation", {
   expect_equal(acor:::comp_pearson_rho(X, Y), -1.0)
 })
 
+test_that("compute_pearson_variance matches cor() and returns positive variances", {
+  set.seed(314)
+  n <- 200
+  X <- rnorm(n)
+  Y <- 0.4 * X + rnorm(n, sd = 0.7)
+  
+  result <- acor:::compute_pearson_variance(X, Y, IID = TRUE)
+  
+  expect_equal(result$estimate, cor(X, Y, method = "pearson"), tolerance = 1e-10)
+  expect_true(result$var > 0)
+  expect_equal(result$var_ind, 1)
+})
 
-test_that("kendall_tau_b_mod matches brute force triple-tie version", {
-  set.seed(42)
-  n <- 50
-  X <- sample(1:5, n, replace = TRUE)
-  Y <- sample(1:5, n, replace = TRUE)
-  
-  # Brute force O(n^3) triple tie counting
-  ties_x <- 0
-  ties_y <- 0
-  for (i in 3:n) {
-    for (j in 2:(i - 1)) {
-      for (k in 1:(j - 1)) {
-        ties_x <- ties_x + ifelse(X[i] == X[j] & X[j] == X[k], 1, 0)
-        ties_y <- ties_y + ifelse(Y[i] == Y[j] & Y[j] == Y[k], 1, 0)
-      }
-    }
+test_that("pearson HAC variance matches legacy delta-method implementation", {
+  set.seed(316)
+  n <- 200
+  X <- cumsum(rnorm(n))
+  Y <- 0.35 * X + cumsum(rnorm(n))
+
+  result <- acor:::compute_pearson_variance(X, Y, IID = FALSE)
+  r <- acor:::comp_pearson_rho(X, Y)
+
+  Rho_LRV <- function(X, Y) {
+    n <- length(X)
+    b <- floor(2 * n^(1 / 3))
+    h <- 1:(n - 1)
+    w <- pmax(1 - abs(h) / (b + 1), 0)
+
+    mean_x <- mean(X)
+    mean_y <- mean(Y)
+    sigma_xy <- (n - 1) / n * stats::cov(X, Y)
+    var_x <- (n - 1) / n * stats::var(X)
+    var_y <- (n - 1) / n * stats::var(Y)
+
+    x_autoc <- stats::acf(X, plot = FALSE, type = "covariance",
+                          demean = TRUE, lag.max = n - 1)$acf
+    y_autoc <- stats::acf(Y, plot = FALSE, type = "covariance",
+                          demean = TRUE, lag.max = n - 1)$acf
+    x2_autoc <- stats::acf(X^2, plot = FALSE, type = "covariance",
+                           demean = TRUE, lag.max = n - 1)$acf
+    y2_autoc <- stats::acf(Y^2, plot = FALSE, type = "covariance",
+                           demean = TRUE, lag.max = n - 1)$acf
+    xy_autoc <- stats::acf(X * Y, plot = FALSE, type = "covariance",
+                           demean = TRUE, lag.max = n - 1)$acf
+
+    xy_crossc <- stats::ccf(X, Y, plot = FALSE, type = "covariance",
+                            demean = TRUE, lag.max = n - 1)$acf
+    xx2_crossc <- stats::ccf(X, X^2, plot = FALSE, type = "covariance",
+                             demean = TRUE, lag.max = n - 1)$acf
+    yx2_crossc <- stats::ccf(Y, X^2, plot = FALSE, type = "covariance",
+                             demean = TRUE, lag.max = n - 1)$acf
+    xy2_crossc <- stats::ccf(X, Y^2, plot = FALSE, type = "covariance",
+                             demean = TRUE, lag.max = n - 1)$acf
+    yy2_crossc <- stats::ccf(Y, Y^2, plot = FALSE, type = "covariance",
+                             demean = TRUE, lag.max = n - 1)$acf
+    x2y2_crossc <- stats::ccf(X^2, Y^2, plot = FALSE, type = "covariance",
+                              demean = TRUE, lag.max = n - 1)$acf
+    xxy_crossc <- stats::ccf(X, X * Y, plot = FALSE, type = "covariance",
+                             demean = TRUE, lag.max = n - 1)$acf
+    yxy_crossc <- stats::ccf(Y, X * Y, plot = FALSE, type = "covariance",
+                             demean = TRUE, lag.max = n - 1)$acf
+    x2xy_crossc <- stats::ccf(X^2, X * Y, plot = FALSE, type = "covariance",
+                              demean = TRUE, lag.max = n - 1)$acf
+    y2xy_crossc <- stats::ccf(Y^2, X * Y, plot = FALSE, type = "covariance",
+                              demean = TRUE, lag.max = n - 1)$acf
+
+    x_lrv <- sum(x_autoc[1], 2 * (w * x_autoc[-1]))
+    y_lrv <- sum(y_autoc[1], 2 * (w * y_autoc[-1]))
+    x2_lrv <- sum(x2_autoc[1], 2 * (w * x2_autoc[-1]))
+    y2_lrv <- sum(y2_autoc[1], 2 * (w * y2_autoc[-1]))
+    xy_lrv <- sum(xy_autoc[1], 2 * (w * xy_autoc[-1]))
+    xy_lrv_c <- sum(c(sort(w), 1, w) * xy_crossc)
+    xx2_lrv_c <- sum(c(sort(w), 1, w) * xx2_crossc)
+    yx2_lrv_c <- sum(c(sort(w), 1, w) * yx2_crossc)
+    xy2_lrv_c <- sum(c(sort(w), 1, w) * xy2_crossc)
+    yy2_lrv_c <- sum(c(sort(w), 1, w) * yy2_crossc)
+    x2y2_lrv_c <- sum(c(sort(w), 1, w) * x2y2_crossc)
+    xxy_lrv_c <- sum(c(sort(w), 1, w) * xxy_crossc)
+    yxy_lrv_c <- sum(c(sort(w), 1, w) * yxy_crossc)
+    x2xy_lrv_c <- sum(c(sort(w), 1, w) * x2xy_crossc)
+    y2xy_lrv_c <- sum(c(sort(w), 1, w) * y2xy_crossc)
+
+    Sigma <- diag(c(x_lrv, y_lrv, x2_lrv, y2_lrv, xy_lrv))
+    Sigma[upper.tri(Sigma)] <- c(
+      xy_lrv_c, xx2_lrv_c, yx2_lrv_c, xy2_lrv_c, yy2_lrv_c,
+      x2y2_lrv_c, xxy_lrv_c, yxy_lrv_c, x2xy_lrv_c, y2xy_lrv_c
+    )
+    Sigma[lower.tri(Sigma)] <- t(Sigma)[lower.tri(Sigma)]
+
+    A <- matrix(c(
+      -2 * mean_x, -mean_y,
+      0, 0,
+      -mean_x, -2 * mean_y,
+      1, 0, 0,
+      0, 0, 1,
+      0, 1, 0
+    ), nrow = 3)
+    B <- c(
+      -0.5 * sigma_xy / sqrt(var_y) * sqrt(var_x)^(-3),
+      1 / sqrt(var_x * var_y),
+      -0.5 * sigma_xy / sqrt(var_x) * sqrt(var_y)^(-3)
+    )
+
+    as.numeric(B %*% A %*% Sigma %*% t(A) %*% B)
   }
-  ties_x <- ties_x / choose(n, 3)
-  ties_y <- ties_y / choose(n, 3)
+
+  expect_equal(result$estimate, r, tolerance = 1e-10)
+  expect_equal(result$var, Rho_LRV(X, Y), tolerance = 1e-10)
+})
+
+test_that("acor.test works for pearson single predictor", {
+  set.seed(315)
+  n <- 500
+  X <- rnorm(n)
+  Y <- 0.3 * X + rnorm(n, sd = 0.8)
   
-  tau_a <- kendall_tau_a(X, Y)
-  expected <- tau_a / sqrt((1 - ties_x) * (1 - ties_y))
+  result <- acor:::acor.test(X, Y, method = "pearson")
+  ref <- cor.test(X, Y, method = "pearson")
   
-  expect_equal(kendall_tau_b_mod(X, Y), expected, tolerance = 1e-10)
+  expect_equal(unname(result$estimate), unname(ref$estimate), tolerance = 1e-10)
+  expect_equal(result$p.value_ind, ref$p.value, tolerance = 0.03)
+  expect_true(is.finite(result$conf.int[1]))
+  expect_true(is.finite(result$conf.int[2]))
+})
+
+Rhob_ind_LRV_ref <- function(X, Y) {
+  n <- length(X)
+  b <- floor(2 * n^(1 / 3))
+  h <- 1:(n - 1)
+  w <- pmax(1 - abs(h) / (b + 1), 0)
+
+  x_grade <- (rank(X) - 0.5) / n - 0.5
+  y_grade <- (rank(Y) - 0.5) / n - 0.5
+  x_autoc <- n / (n - 1) *
+    stats::acf(x_grade, plot = FALSE, type = "covariance",
+               demean = FALSE, lag.max = n - 1)$acf / stats::var(x_grade)
+  y_autoc <- n / (n - 1) *
+    stats::acf(y_grade, plot = FALSE, type = "covariance",
+               demean = FALSE, lag.max = n - 1)$acf / stats::var(y_grade)
+
+  sum(x_autoc[1] * y_autoc[1], 2 * (w * x_autoc[-1] * y_autoc[-1]))
+}
+
+Rhob_LRV_ref <- function(X, Y, spearman, spearman_X, spearman_Y) {
+  n <- length(X)
+  b <- floor(2 * n^(1 / 3))
+  h <- 1:(n - 1)
+  w <- pmax(1 - abs(h) / (b + 1), 0)
+
+  G_XY <- Vectorize(function(x_val, y_val) {
+    (mean(X <= x_val & Y <= y_val) +
+       mean(X <= x_val & Y < y_val) +
+       mean(X < x_val & Y <= y_val) +
+       mean(X < x_val & Y < y_val)) / 4
+  })
+  G_X <- Vectorize(function(x_val) (mean(X < x_val) + mean(X <= x_val)) / 2)
+  G_Y <- Vectorize(function(y_val) (mean(Y < y_val) + mean(Y <= y_val)) / 2)
+  g_x <- Vectorize(function(x_val) mean(G_XY(x_val, Y)))
+  g_y <- Vectorize(function(y_val) mean(G_XY(X, y_val)))
+  x_eq <- Vectorize(function(x_val) mean(X == x_val))
+  y_eq <- Vectorize(function(y_val) mean(Y == y_val))
+
+  G_XX <- G_X(X)
+  G_YY <- G_Y(Y)
+  k_XY_rho <- 4 * (g_x(X) + g_y(Y) + G_XX * G_YY - G_XX - G_YY) + 1 - spearman
+  k_X_rho <- 1 - x_eq(X)^2 - spearman_X
+  k_Y_rho <- 1 - y_eq(Y)^2 - spearman_Y
+
+  k_XY_rho_autoc <- stats::acf(k_XY_rho, plot = FALSE, type = "covariance",
+                               demean = FALSE, lag.max = n - 1)$acf
+  k_X_rho_autoc <- stats::acf(k_X_rho, plot = FALSE, type = "covariance",
+                              demean = FALSE, lag.max = n - 1)$acf
+  k_Y_rho_autoc <- stats::acf(k_Y_rho, plot = FALSE, type = "covariance",
+                              demean = FALSE, lag.max = n - 1)$acf
+  k_X_rho_crossc <- stats::ccf(k_XY_rho, k_X_rho, plot = FALSE,
+                               type = "covariance", lag.max = n - 1)$acf
+  k_Y_rho_crossc <- stats::ccf(k_XY_rho, k_Y_rho, plot = FALSE,
+                               type = "covariance", lag.max = n - 1)$acf
+  k_XY_rho_crossc <- stats::ccf(k_X_rho, k_Y_rho, plot = FALSE,
+                                type = "covariance", lag.max = n - 1)$acf
+
+  sigma_rho_sq <- 9 * sum(k_XY_rho_autoc[1], 2 * (w * k_XY_rho_autoc[-1]))
+  sigma_rhoX_sq <- 9 * sum(k_X_rho_autoc[1], 2 * (w * k_X_rho_autoc[-1]))
+  sigma_rhoY_sq <- 9 * sum(k_Y_rho_autoc[1], 2 * (w * k_Y_rho_autoc[-1]))
+  sigma_rhorhoX <- 9 * sum(c(sort(w), 1, w) * k_X_rho_crossc)
+  sigma_rhorhoY <- 9 * sum(c(sort(w), 1, w) * k_Y_rho_crossc)
+  sigma_rhoXrhoY <- 9 * sum(c(sort(w), 1, w) * k_XY_rho_crossc)
+
+  (sigma_rho_sq -
+     spearman * (sigma_rhorhoX / spearman_X + sigma_rhorhoY / spearman_Y) +
+     spearman^2 / 4 * (
+       sigma_rhoX_sq / spearman_X^2 +
+         sigma_rhoY_sq / spearman_Y^2 +
+         (2 * sigma_rhoXrhoY) / spearman_Y / spearman_X
+     )) / (spearman_X * spearman_Y)
+}
+
+test_that("compute_rho_b_variance matches cor() and legacy IID formula", {
+  set.seed(317)
+  n <- 150
+  X <- sample(1:8, n, replace = TRUE)
+  Y <- sample(1:8, n, replace = TRUE)
+
+  result <- acor:::compute_rho_b_variance(X, Y, IID = TRUE)
+  rho <- 12 * (n - 1) / n^3 * stats::cov(X, Y, method = "spearman")
+  rho_x <- 12 * (n - 1) / n^3 * stats::cov(X, X, method = "spearman")
+  rho_y <- 12 * (n - 1) / n^3 * stats::cov(Y, Y, method = "spearman")
+
+  G_XY <- Vectorize(function(x_val, y_val) {
+    (mean(X <= x_val & Y <= y_val) +
+       mean(X <= x_val & Y < y_val) +
+       mean(X < x_val & Y <= y_val) +
+       mean(X < x_val & Y < y_val)) / 4
+  })
+  G_X <- Vectorize(function(x_val) (mean(X < x_val) + mean(X <= x_val)) / 2)
+  G_Y <- Vectorize(function(y_val) (mean(Y < y_val) + mean(Y <= y_val)) / 2)
+  g_x <- Vectorize(function(x_val) mean(G_XY(x_val, Y)))
+  g_y <- Vectorize(function(y_val) mean(G_XY(X, y_val)))
+  x_eq <- Vectorize(function(x_val) mean(X == x_val))
+  y_eq <- Vectorize(function(y_val) mean(Y == y_val))
+
+  g_xX <- g_x(X)
+  g_yY <- g_y(Y)
+  G_XX <- G_X(X)
+  G_YY <- G_Y(Y)
+  x_eqX <- x_eq(X)
+  y_eqY <- y_eq(Y)
+  var_rho <- 9 * mean((4 * (g_xX + g_yY + G_XX * G_YY - G_XX - G_YY) + 1 - rho)^2)
+  var_rho_x <- 4 * mean((1 - x_eqX^2 - rho_x)^2)
+  var_rho_y <- 4 * mean((1 - y_eqY^2 - rho_y)^2)
+  var_rhorho_x <- 9 * mean((4 * (g_xX + g_yY + G_XX * G_YY - G_XX - G_YY) + 1 - rho) *
+                             (1 - x_eqX^2 - rho_x))
+  var_rhorho_y <- 9 * mean((4 * (g_xX + g_yY + G_XX * G_YY - G_XX - G_YY) + 1 - rho) *
+                             (1 - y_eqY^2 - rho_y))
+  var_rho_xrho_y <- 9 * mean((1 - x_eqX^2 - rho_x) * (1 - y_eqY^2 - rho_y))
+  var_expected <- (var_rho - rho * (var_rhorho_x / rho_x + var_rhorho_y / rho_y) +
+                     0.25 * rho^2 * (var_rho_x / rho_x^2 + var_rho_y / rho_y^2 +
+                                       2 * var_rho_xrho_y / (rho_x * rho_y))) /
+    (rho_x * rho_y)
+
+  expect_equal(result$rho_b, cor(X, Y, method = "spearman"), tolerance = 1e-10)
+  expect_equal(result$var, var_expected, tolerance = 1e-10)
+  expect_equal(result$var_ind, 1)
+})
+
+test_that("compute_rho_b_variance matches legacy HAC formulas", {
+  set.seed(318)
+  n <- 150
+  X <- cumsum(sample(-1:2, n, replace = TRUE))
+  Y <- cumsum(sample(-1:2, n, replace = TRUE))
+
+  result <- acor:::compute_rho_b_variance(X, Y, IID = FALSE)
+  rho <- 12 * (n - 1) / n^3 * stats::cov(X, Y, method = "spearman")
+  rho_x <- 12 * (n - 1) / n^3 * stats::cov(X, X, method = "spearman")
+  rho_y <- 12 * (n - 1) / n^3 * stats::cov(Y, Y, method = "spearman")
+
+  expect_equal(result$rho_b, cor(X, Y, method = "spearman"), tolerance = 1e-10)
+  expect_equal(result$var, Rhob_LRV_ref(X, Y, rho, rho_x, rho_y), tolerance = 1e-10)
+  expect_equal(result$var_ind, Rhob_ind_LRV_ref(X, Y), tolerance = 1e-10)
+})
+
+test_that("acor.test works for rho_b single predictor", {
+  set.seed(319)
+  n <- 250
+  X <- sample(1:10, n, replace = TRUE)
+  Y <- sample(1:10, n, replace = TRUE)
+
+  result <- acor:::acor.test(X, Y, method = "rho_b")
+
+  expect_s3_class(result, "acor_htest")
+  expect_equal(unname(result$estimate), cor(X, Y, method = "spearman"), tolerance = 1e-10)
+  expect_true(is.numeric(result$p.value))
+  expect_true(result$p.value >= 0 && result$p.value <= 1)
+  expect_true(is.finite(result$conf.int[1]))
+  expect_true(is.finite(result$conf.int[2]))
+})
+
+test_that("acor.test works for tau_b single predictor", {
+  set.seed(322)
+  n <- 250
+  X <- sample(1:10, n, replace = TRUE)
+  Y <- sample(1:10, n, replace = TRUE)
+
+  result <- acor:::acor.test(X, Y, method = "tau_b")
+
+  expect_s3_class(result, "acor_htest")
+  expect_equal(unname(result$estimate), cor(X, Y, method = "kendall"), tolerance = 1e-10)
+  expect_true(is.numeric(result$p.value))
+  expect_true(result$p.value >= 0 && result$p.value <= 1)
+  expect_true(is.finite(result$conf.int[1]))
+  expect_true(is.finite(result$conf.int[2]))
+})
+
+test_that("acor.test works for gamma single predictor", {
+  set.seed(324)
+  n <- 250
+  X <- sample(1:10, n, replace = TRUE)
+  Y <- sample(1:10, n, replace = TRUE)
+
+  result <- acor:::acor.test(X, Y, method = "gamma")
+
+  expect_s3_class(result, "acor_htest")
+  expect_equal(unname(result$estimate), acor:::goodman_kruskal_gamma(X, Y), tolerance = 1e-10)
+  expect_true(is.numeric(result$p.value))
+  expect_true(result$p.value >= 0 && result$p.value <= 1)
+  expect_true(is.finite(result$conf.int[1]))
+  expect_true(is.finite(result$conf.int[2]))
 })
 
 test_that("tau-a IID variance matches brute force (no ties)", {

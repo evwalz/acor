@@ -7,7 +7,7 @@
 acor.test(
   X,
   Y,
-  method = c("akc", "agc", "cid", "cma", "tau_a", "rho_a"),
+  method = c("akc", "agc", "cid", "cma", "tau_a", "tau_b", "rho_a", "rho_b", "gamma", "pearson"),
   alternative = c("two.sided", "less", "greater"),
   conf.level = 0.95,
   fisher = FALSE,
@@ -21,7 +21,7 @@ numeric matrix with one or more predictor columns.}
 \item{Y}{Numeric outcome vector.}
 
 \item{method}{Character string specifying the method: \code{"akc"}, \code{"agc"},
-\code{"cid"}, \code{"cma"}, \code{"tau_a"}, or \code{"rho_a"}.}
+\code{"cid"}, \code{"cma"}, \code{"tau_a"}, \code{"tau_b"}, \code{"rho_a"}, \code{"rho_b"}, \code{"gamma"}, or \code{"pearson"}.}
 
 \item{alternative}{Character string specifying the alternative hypothesis:
 \itemize{
@@ -65,6 +65,9 @@ predictor-specific correlations with \code{Y} are equal. The returned object als
 includes individual predictor tests against the method-specific null value and
 all pairwise differences between predictors.
 
+Pearson, rho_b, tau_b, and gamma inference are currently
+implemented only for a single predictor.
+
 In the multivariate case, \code{alternative} affects the individual predictor
 tests and pairwise differences. The top-level equality test remains a
 chi-squared test of equality across predictors.
@@ -86,6 +89,18 @@ test_result <- acor.test(x, y, method = "akc", alternative = "two.sided")
 
 # Test if CMA differs from 0.5 (independence test)
 test_result <- acor.test(x, y, method = "cma", alternative = "two.sided")
+
+# Pearson inference
+test_result <- acor.test(x, y, method = "pearson")
+
+# rho_b inference
+test_result <- acor.test(x, y, method = "rho_b")
+
+# tau_b inference
+test_result <- acor.test(x, y, method = "tau_b")
+
+# gamma inference
+test_result <- acor.test(x, y, method = "gamma")
 
 # Compare multiple predictors
 x1 <- rnorm(100)

@@ -42,7 +42,6 @@ acor.test(X, y, method = "agc")
 |--------|-------------|-------|-------------------|
 | tau_a | Kendall's tau-a (no tie correction) | [-1, 1] | 0 |
 | tau_b | Kendall's tau-b (pair-based tie correction) | [-1, 1] | 0 |
-| tau_b_mod | Modified tau-b (triple-based tie correction) | [-1, 1] | 0 |
 | gamma | Goodman-Kruskal gamma | [-1, 1] | 0 |
 | rho_a | Spearman's rho (no tie correction) | [-1, 1] | 0 |
 | rho_b | Spearman's rho (with tie correction) | [-1, 1] | 0 |

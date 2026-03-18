@@ -7,7 +7,7 @@
 acor(
   X,
   Y,
-  method = c("pearson", "akc", "agc", "cid", "cma", "tau_a", "tau_b", "tau_b_mod",
+  method = c("pearson", "akc", "agc", "cid", "cma", "tau_a", "tau_b",
     "gamma", "rho_a", "rho_b")
 )
 }
@@ -19,7 +19,7 @@ numeric matrix with one predictor per column.}
 
 \item{method}{Character string specifying the method:
 "akc", "agc", "cid", "cma",
-"tau_a", "tau_b", "tau_b_mod",
+"tau_a", "tau_b",
 "gamma",
 "rho_a", "rho_b",
 "pearson"}
@@ -46,7 +46,6 @@ Kendall rank correlations (symmetric):
 \itemize{
 \item tau_a: Kendall's tau-a (no tie correction)
 \item tau_b: Kendall's tau-b (pair-based tie correction)
-\item tau_b_mod: Modified tau-b (triple-based tie correction)
 }
 
 Goodman-Kruskal measure (symmetric):
@@ -70,7 +69,6 @@ All other measures range from -1 to 1 (with 0 = independence).
 
 For multiple predictors, \code{X} should be a matrix with predictors in columns.
 The returned \code{estimate} vector follows the column order of \code{X}.
-Method \code{"tau_b_mod"} requires at least 3 observations.
 }
 \examples{
 # Single predictor

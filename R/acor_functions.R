@@ -11,7 +11,7 @@
 #' @param Y Numeric outcome vector.
 #' @param method Character string specifying the method:
 #'   "akc", "agc", "cid", "cma",
-#'   "tau_a", "tau_b", "tau_b_mod",
+#'   "tau_a", "tau_b",
 #'   "gamma",
 #'   "rho_a", "rho_b",
 #'   "pearson"
@@ -31,7 +31,6 @@
 #' Kendall rank correlations (symmetric):
 #'   - tau_a: Kendall's tau-a (no tie correction)
 #'   - tau_b: Kendall's tau-b (pair-based tie correction)
-#'   - tau_b_mod: Modified tau-b (triple-based tie correction)
 #' 
 #' Goodman-Kruskal measure (symmetric):
 #'   - gamma: Goodman-Kruskal gamma (concordant-discordant pairs only)
@@ -48,8 +47,6 @@
 #' 
 #' For multiple predictors, `X` should be a matrix with predictors in columns.
 #' The returned `estimate` vector follows the column order of `X`.
-#' Method `"tau_b_mod"` requires at least 3 observations.
-#' 
 #' @examples
 #' # Single predictor
 #' x <- rnorm(100)
@@ -64,7 +61,7 @@
 #' 
 #' @export
 acor <- function(X, Y, method = c("pearson", "akc", "agc", "cid", "cma",
-                                  "tau_a", "tau_b", "tau_b_mod",
+                                  "tau_a", "tau_b",
                                   "gamma",
                                   "rho_a", "rho_b"
                                   )) {
@@ -73,12 +70,7 @@ acor <- function(X, Y, method = c("pearson", "akc", "agc", "cid", "cma",
   validated <- validate_acor_inputs(X, Y)
   X <- validated$X
   Y <- validated$Y
-  n <- validated$n
   m <- validated$m
-  if (method == "tau_b_mod" && n < 3) {
-    stop("Method 'tau_b_mod' requires at least 3 observations")
-  }
-  
   # Pre-compute Y ranks once for methods that need them
   y_ranks <- NULL
   rank_methods <- c("agc", "cma", "rho_a", "rho_b")
@@ -94,7 +86,6 @@ acor <- function(X, Y, method = c("pearson", "akc", "agc", "cid", "cma",
            cma = (compute_agc(y_ranks, rank(xk, ties.method = "average")) + 1) / 2,
            tau_a = kendall_tau_a(xk, Y),
            tau_b = kendall_tau_b(xk, Y),
-           tau_b_mod = kendall_tau_b_mod(xk, Y),
            gamma = goodman_kruskal_gamma(xk, Y),
            rho_a = comp_spearman_rho_a(y_ranks, rank(xk, ties.method = "average")),
            rho_b = comp_spearman_rho_b(y_ranks, rank(xk, ties.method = "average")),
@@ -126,7 +117,8 @@ print.acor <- function(x, ...) {
 #'   numeric matrix with one or more predictor columns.
 #' @param Y Numeric outcome vector.
 #' @param method Character string specifying the method: `"akc"`, `"agc"`,
-#'   `"cid"`, `"cma"`, `"tau_a"`, or `"rho_a"`.
+#'   `"cid"`, `"cma"`, `"tau_a"`, `"tau_b"`, `"rho_a"`,
+#'   `"rho_b"`, `"gamma"`, or `"pearson"`.
 #' @param alternative Character string specifying the alternative hypothesis:
 #'   * `"two.sided"` (default): tests if correlation differs from null value
 #'   * `"greater"`: tests if correlation is greater than null value
@@ -161,6 +153,9 @@ print.acor <- function(x, ...) {
 #' includes individual predictor tests against the method-specific null value and
 #' all pairwise differences between predictors.
 #'
+#' Pearson, rho_b, tau_b, and gamma inference are currently implemented
+#' only for a single predictor.
+#'
 #' In the multivariate case, `alternative` affects the individual predictor
 #' tests and pairwise differences. The top-level equality test remains a
 #' chi-squared test of equality across predictors.
@@ -180,6 +175,18 @@ print.acor <- function(x, ...) {
 #' 
 #' # Test if CMA differs from 0.5 (independence test)
 #' test_result <- acor.test(x, y, method = "cma", alternative = "two.sided")
+#'
+#' # Pearson inference
+#' test_result <- acor.test(x, y, method = "pearson")
+#'
+#' # rho_b inference
+#' test_result <- acor.test(x, y, method = "rho_b")
+#'
+#' # tau_b inference
+#' test_result <- acor.test(x, y, method = "tau_b")
+#'
+#' # gamma inference
+#' test_result <- acor.test(x, y, method = "gamma")
 #' 
 #' # Compare multiple predictors
 #' x1 <- rnorm(100)
@@ -191,7 +198,7 @@ print.acor <- function(x, ...) {
 #' 
 #' @export
 acor.test <- function(X, Y, 
-                      method = c("akc", "agc", "cid", "cma", "tau_a", "rho_a"),
+                      method = c("akc", "agc", "cid", "cma", "tau_a", "tau_b", "rho_a", "rho_b", "gamma", "pearson"),
                       alternative = c("two.sided", "less", "greater"),
                       conf.level = 0.95,
                       fisher = FALSE, 
@@ -233,7 +240,7 @@ acor.test <- function(X, Y,
     }
   }
   
-  if (method %in% c("akc", "agc", "tau_a", "rho_a")) {
+  if (method %in% c("akc", "agc", "tau_a", "tau_b", "rho_a", "rho_b", "gamma", "pearson")) {
     null.value <- 0  # Independence for [-1, 1] scale
   } else {  # cid or cma
     null.value <- 0.5  # Independence for [0, 1] scale
@@ -290,6 +297,26 @@ acor.test <- function(X, Y,
       variance <- result$Sigma
       variance_ind <- result$Sigma_ind
     } 
+  } else if (method == "tau_b") {
+    version <- select_kernel_version(Y, X)
+    
+    if (m == 1) {
+      result <- compute_tau_b_variance(X[, 1], Y, IID = IID, version = version)
+      estimates <- result$tau_b
+      variance <- result$var
+      variance_ind <- result$var_ind
+    } else {
+      stop("Multivariate tau_b inference is not yet implemented in acor.test()")
+    }
+  } else if (method == "gamma") {
+    version <- select_kernel_version(Y, X)
+    if (m != 1) {
+      stop("Multivariate gamma inference is not yet implemented in acor.test()")
+    }
+    result <- compute_gamma_variance(X[, 1], Y, IID = IID, version = version)
+    estimates <- result$gamma
+    variance <- result$var
+    variance_ind <- result$var_ind
   } else if (method == "rho_a") {
     
     if (m == 1) {
@@ -302,6 +329,28 @@ acor.test <- function(X, Y,
       estimates <- result$rho_a_vector
       variance <- result$Sigma
       variance_ind <- result$Sigma_ind
+    }
+    
+  } else if (method == "rho_b") {
+    
+    if (m == 1) {
+      result <- compute_rho_b_variance(X[, 1], Y, IID = IID)
+      estimates <- result$rho_b
+      variance <- result$var
+      variance_ind <- result$var_ind
+    } else {
+      stop("Multivariate rho_b inference is not yet implemented in acor.test()")
+    }
+    
+  } else if (method == "pearson") {
+    
+    if (m == 1) {
+      result <- compute_pearson_variance(X[, 1], Y, IID = IID)
+      estimates <- result$estimate
+      variance <- result$var
+      variance_ind <- result$var_ind
+    } else {
+      stop("Multivariate Pearson inference is not yet implemented in acor.test()")
     }
     
   } else {
@@ -620,7 +669,7 @@ print.acor_htest <- function(x, ...) {
     }
     display_name <- switch(names(x$estimate),
                            akc = "AKC", agc = "AGC", cid = "CID", cma = "CMA",
-                           tau_a = "tau-a", tau_b = "tau-b", tau_b_mod = "tau-b-mod",
+                           tau_a = "tau-a", tau_b = "tau-b",
                            gamma = "gamma",
                            rho_a = "rho-a", rho_b = "rho-b",
                            pearson = "Pearson r",

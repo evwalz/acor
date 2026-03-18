@@ -44,7 +44,7 @@ independence corresponds to `0.5`.
 
 The package also supports symmetric measures:
 
-- `tau_a`, `tau_b`, `tau_b_mod`
+- `tau_a`, `tau_b`
 - `gamma`
 - `rho_a`, `rho_b`
 - `pearson`

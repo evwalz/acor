@@ -310,42 +310,6 @@ double goodman_kruskal_gamma(NumericVector X, NumericVector Y) {
 
 
 // ============================================================================
-// kendall_tau_b_mod
-//
-// Modified tau-b using triple-based tie correction.
-// ============================================================================
-
-// [[Rcpp::export]]
-double kendall_tau_b_mod(NumericVector X, NumericVector Y) {
-  double tau_a_val = kendall_tau_a(X, Y);
-  int n = X.size();
-  
-  // Count triple ties for X
-  std::map<double, int> freq_x;
-  for (int i = 0; i < n; i++) freq_x[X[i]]++;
-  double triple_ties_x = 0;
-  for (auto& p : freq_x) {
-    double nk = p.second;
-    triple_ties_x += nk * (nk - 1) * (nk - 2);
-  }
-  triple_ties_x /= (double)n * (n - 1) * (n - 2);
-  
-  // Count triple ties for Y
-  std::map<double, int> freq_y;
-  for (int i = 0; i < n; i++) freq_y[Y[i]]++;
-  double triple_ties_y = 0;
-  for (auto& p : freq_y) {
-    double nk = p.second;
-    triple_ties_y += nk * (nk - 1) * (nk - 2);
-  }
-  triple_ties_y /= (double)n * (n - 1) * (n - 2);
-  
-  double denom = std::sqrt((1.0 - triple_ties_x) * (1.0 - triple_ties_y));
-  return (denom > 1e-10) ? tau_a_val / denom : 0.0;
-}
-
-
-// ============================================================================
 // H_bar_vec_v2_cpp
 //
 // Computes H_bar for all observations using Fenwick tree -- O(n log n)

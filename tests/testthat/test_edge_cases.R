@@ -51,11 +51,6 @@ test_that("acor() works with n = 2 (minimum valid)", {
   expect_true(is.finite(result$estimate))
 })
 
-test_that("acor() rejects tau_b_mod for n < 3", {
-  expect_error(acor(c(1, 2), c(2, 1), method = "tau_b_mod"),
-               "at least 3 observations")
-})
-
 test_that("acor() works with n = 3", {
   result <- acor(c(1, 2, 3), c(1, 3, 2), method = "agc")
   expect_true(is.finite(result$estimate))
@@ -97,12 +92,41 @@ test_that("acor.test() rejects invalid conf.level", {
                "conf.level")
 })
 
+test_that("acor.test() rejects multivariate pearson inference", {
+  X <- cbind(rnorm(20), rnorm(20))
+  y <- rnorm(20)
+  expect_error(acor.test(X, y, method = "pearson"),
+               "Multivariate Pearson inference is not yet implemented")
+})
+
+test_that("acor.test() rejects multivariate rho_b inference", {
+  X <- cbind(rnorm(20), rnorm(20))
+  y <- rnorm(20)
+  expect_error(acor.test(X, y, method = "rho_b"),
+               "Multivariate rho_b inference is not yet implemented")
+})
+
+test_that("acor.test() rejects multivariate tau_b inference", {
+  X <- cbind(rnorm(20), rnorm(20))
+  y <- rnorm(20)
+  expect_error(acor.test(X, y, method = "tau_b"),
+               "Multivariate tau_b inference is not yet implemented")
+})
+
+test_that("acor.test() rejects multivariate gamma inference", {
+  X <- cbind(rnorm(20), rnorm(20))
+  y <- rnorm(20)
+  expect_error(acor.test(X, y, method = "gamma"),
+               "Multivariate gamma inference is not yet implemented")
+})
+
 test_that("acor.test() rejects HAC inference with fewer than 3 observations", {
   expect_error(acor.test(c(1, 2), c(1, 2), method = "akc", IID = FALSE),
                "At least 3 observations")
   expect_error(acor.test(cbind(c(1, 2), c(2, 1)), c(1, 2), method = "rho_a", IID = FALSE),
                "At least 3 observations")
 })
+
 
 # ============================================================================
 # Section 3: Fisher transformation
