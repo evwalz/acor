@@ -394,7 +394,10 @@ acor.test <- function(X, Y,
       variance <- result$var
       variance_ind <- result$var_ind
     } else {
-      stop("Multivariate Pearson inference is not yet implemented in acor.test()")
+      result <- compute_pearson_multivariate_variance(X, Y, IID = IID)
+      estimates <- result$estimate_vector
+      variance <- result$Sigma
+      variance_ind <- result$Sigma_ind
     }
     
   } else {

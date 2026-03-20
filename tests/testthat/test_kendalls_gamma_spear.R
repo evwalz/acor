@@ -352,6 +352,102 @@ test_that("acor.test works for pearson single predictor", {
   expect_true(is.finite(result$conf.int[2]))
 })
 
+
+test_that("multivariate pearson IID diagonal matches univariate", {
+  set.seed(400)
+  n <- 200
+  X1 <- rnorm(n)
+  X2 <- rnorm(n)
+  Y <- 0.4 * X1 - 0.2 * X2 + rnorm(n)
+  X_mat <- cbind(X1, X2)
+
+  res_multi <- acor:::compute_pearson_multivariate_variance(X_mat, Y, IID = TRUE)
+  res_uni1 <- acor:::compute_pearson_variance(X1, Y, IID = TRUE)
+  res_uni2 <- acor:::compute_pearson_variance(X2, Y, IID = TRUE)
+
+  expect_equal(res_multi$estimate_vector[1], res_uni1$estimate, tolerance = 1e-12)
+  expect_equal(res_multi$estimate_vector[2], res_uni2$estimate, tolerance = 1e-12)
+  expect_equal(res_multi$Sigma[1, 1], res_uni1$var, tolerance = 1e-12)
+  expect_equal(res_multi$Sigma[2, 2], res_uni2$var, tolerance = 1e-12)
+  expect_equal(res_multi$Sigma[1, 2], res_multi$Sigma[2, 1], tolerance = 1e-14)
+})
+
+
+test_that("multivariate pearson IID independence covariance is corr(X)", {
+  set.seed(401)
+  n <- 300
+  X1 <- rnorm(n)
+  X2 <- 0.5 * X1 + rnorm(n)
+  X3 <- rnorm(n)
+  X_mat <- cbind(X1, X2, X3)
+  Y <- rnorm(n)
+
+  Sigma_ind <- acor:::ind_covariance_pearson_iid(X_mat)
+
+  expect_equal(diag(Sigma_ind), rep(1, 3), tolerance = 1e-12)
+
+  X_std <- scale(X_mat, center = TRUE, scale = FALSE)
+  X_std <- X_std / rep(sqrt(colMeans(X_std^2)), each = n)
+  expected_corr <- (t(X_std) %*% X_std) / n
+  expect_equal(Sigma_ind, unname(as.matrix(expected_corr)), tolerance = 1e-12)
+})
+
+
+test_that("multivariate pearson HAC diagonal matches univariate HAC", {
+  set.seed(402)
+  n <- 200
+  X1 <- cumsum(rnorm(n))
+  X2 <- rnorm(n)
+  Y <- 0.3 * X1 + rnorm(n)
+  X_mat <- cbind(X1, X2)
+
+  res_multi <- acor:::compute_pearson_multivariate_variance(X_mat, Y, IID = FALSE)
+  res_uni1 <- acor:::compute_pearson_variance(X1, Y, IID = FALSE)
+  res_uni2 <- acor:::compute_pearson_variance(X2, Y, IID = FALSE)
+
+  expect_equal(res_multi$estimate_vector[1], res_uni1$estimate, tolerance = 1e-12)
+  expect_equal(res_multi$estimate_vector[2], res_uni2$estimate, tolerance = 1e-12)
+  expect_equal(res_multi$Sigma[1, 1], res_uni1$var, tolerance = 1e-10)
+  expect_equal(res_multi$Sigma[2, 2], res_uni2$var, tolerance = 1e-10)
+})
+
+
+test_that("acor.test works for multivariate pearson IID", {
+  set.seed(403)
+  n <- 200
+  X1 <- rnorm(n)
+  X2 <- rnorm(n)
+  X3 <- rnorm(n)
+  Y <- 0.3 * X1 + 0.2 * X2 + rnorm(n)
+  X_mat <- cbind(X1, X2, X3)
+
+  result <- acor.test(X_mat, Y, method = "pearson", IID = TRUE)
+
+  expect_length(result$estimate, 3)
+  expect_equal(nrow(result$pairwise_results), 3)
+  expect_true(all(is.finite(result$p.value_ind)))
+  expect_true(is.matrix(result$variance))
+  expect_equal(dim(result$variance), c(3, 3))
+  expect_true(all(diag(result$variance) > 0))
+})
+
+
+test_that("acor.test multivariate pearson HAC returns valid output", {
+  set.seed(404)
+  n <- 200
+  X1 <- as.numeric(arima.sim(model = list(ar = 0.3), n = n))
+  X2 <- rnorm(n)
+  Y <- 0.3 * X1 + rnorm(n)
+  X_mat <- cbind(X1, X2)
+
+  result <- acor.test(X_mat, Y, method = "pearson", IID = FALSE)
+
+  expect_length(result$estimate, 2)
+  expect_true(all(diag(result$variance) > 0))
+  expect_true(all(is.finite(result$p.value_ind)))
+})
+
+
 Rhob_ind_LRV_ref <- function(X, Y) {
   n <- length(X)
   b <- floor(2 * n^(1 / 3))
