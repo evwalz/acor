@@ -25,3 +25,19 @@ kernel_agc_v2_cpp <- function(x_rank, y_rank, rho) {
     .Call(`_acor_kernel_agc_v2_cpp`, x_rank, y_rank, rho)
 }
 
+agc_ij_cpp <- function(X, Y) {
+    .Call(`_acor_agc_ij_cpp`, X, Y)
+}
+
+agc_ij_variance_cpp <- function(X, Y) {
+    .Call(`_acor_agc_ij_variance_cpp`, X, Y)
+}
+
+akc_ij_cpp <- function(X, Y) {
+    .Call(`_acor_akc_ij_cpp`, X, Y)
+}
+
+akc_ij_variance_cpp <- function(X, Y) {
+    .Call(`_acor_akc_ij_variance_cpp`, X, Y)
+}
+

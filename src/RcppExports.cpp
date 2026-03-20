@@ -83,6 +83,54 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// agc_ij_cpp
+List agc_ij_cpp(NumericVector X, NumericVector Y);
+RcppExport SEXP _acor_agc_ij_cpp(SEXP XSEXP, SEXP YSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type X(XSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type Y(YSEXP);
+    rcpp_result_gen = Rcpp::wrap(agc_ij_cpp(X, Y));
+    return rcpp_result_gen;
+END_RCPP
+}
+// agc_ij_variance_cpp
+List agc_ij_variance_cpp(NumericVector X, NumericVector Y);
+RcppExport SEXP _acor_agc_ij_variance_cpp(SEXP XSEXP, SEXP YSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type X(XSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type Y(YSEXP);
+    rcpp_result_gen = Rcpp::wrap(agc_ij_variance_cpp(X, Y));
+    return rcpp_result_gen;
+END_RCPP
+}
+// akc_ij_cpp
+List akc_ij_cpp(NumericVector X, NumericVector Y);
+RcppExport SEXP _acor_akc_ij_cpp(SEXP XSEXP, SEXP YSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type X(XSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type Y(YSEXP);
+    rcpp_result_gen = Rcpp::wrap(akc_ij_cpp(X, Y));
+    return rcpp_result_gen;
+END_RCPP
+}
+// akc_ij_variance_cpp
+List akc_ij_variance_cpp(NumericVector X, NumericVector Y);
+RcppExport SEXP _acor_akc_ij_variance_cpp(SEXP XSEXP, SEXP YSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type X(XSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type Y(YSEXP);
+    rcpp_result_gen = Rcpp::wrap(akc_ij_variance_cpp(X, Y));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_acor_kendall_tau_sign_cpp", (DL_FUNC) &_acor_kendall_tau_sign_cpp, 2},
@@ -91,6 +139,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"_acor_goodman_kruskal_gamma", (DL_FUNC) &_acor_goodman_kruskal_gamma, 2},
     {"_acor_H_bar_vec_v2_cpp", (DL_FUNC) &_acor_H_bar_vec_v2_cpp, 2},
     {"_acor_kernel_agc_v2_cpp", (DL_FUNC) &_acor_kernel_agc_v2_cpp, 3},
+    {"_acor_agc_ij_cpp", (DL_FUNC) &_acor_agc_ij_cpp, 2},
+    {"_acor_agc_ij_variance_cpp", (DL_FUNC) &_acor_agc_ij_variance_cpp, 2},
+    {"_acor_akc_ij_cpp", (DL_FUNC) &_acor_akc_ij_cpp, 2},
+    {"_acor_akc_ij_variance_cpp", (DL_FUNC) &_acor_akc_ij_variance_cpp, 2},
     {NULL, NULL, 0}
 };
 

@@ -132,7 +132,6 @@ test_that("Uni HAC | binary Y: auto-dispatch matches original", {
 })
 
 test_that("Uni HAC | discrete X (10) & Y (5): auto-dispatch matches original", {
-  skip_on_cran()
   set.seed(203); n <- 300
   X <- sample(1:10, n, replace = TRUE); Y <- sample(1:5, n, replace = TRUE)
   
@@ -204,7 +203,6 @@ test_that("MV HAC m=3 | continuous X & Y: auto-dispatch matches original", {
 })
 
 test_that("MV HAC m=3 | binary Y: auto-dispatch matches original", {
-  skip_on_cran()
   set.seed(402); n <- 300
   X <- matrix(rnorm(n * 3), ncol = 3); Y <- rbinom(n, 1, 0.6)
   
@@ -217,7 +215,6 @@ test_that("MV HAC m=3 | binary Y: auto-dispatch matches original", {
 })
 
 test_that("MV HAC m=3 | discrete X (10) & Y (5): auto-dispatch matches original", {
-  skip_on_cran()
   set.seed(403); n <- 300
   X <- matrix(sample(1:10, n * 3, replace = TRUE), ncol = 3)
   Y <- sample(1:5, n, replace = TRUE)

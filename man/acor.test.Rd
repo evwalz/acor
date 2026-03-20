@@ -7,11 +7,13 @@
 acor.test(
   X,
   Y,
-  method = c("akc", "agc", "cid", "cma", "tau_a", "tau_b", "rho_a", "rho_b", "gamma", "pearson"),
+  method = c("akc", "agc", "cid", "cma", "tau_a", "tau_b", "rho_a", "rho_b", "gamma",
+    "pearson"),
   alternative = c("two.sided", "less", "greater"),
   conf.level = 0.95,
   fisher = FALSE,
-  IID = TRUE
+  IID = TRUE,
+  variance = c("delta", "ij")
 )
 }
 \arguments{
@@ -21,7 +23,8 @@ numeric matrix with one or more predictor columns.}
 \item{Y}{Numeric outcome vector.}
 
 \item{method}{Character string specifying the method: \code{"akc"}, \code{"agc"},
-\code{"cid"}, \code{"cma"}, \code{"tau_a"}, \code{"tau_b"}, \code{"rho_a"}, \code{"rho_b"}, \code{"gamma"}, or \code{"pearson"}.}
+\code{"cid"}, \code{"cma"}, \code{"tau_a"}, \code{"tau_b"}, \code{"rho_a"},
+\code{"rho_b"}, \code{"gamma"}, or \code{"pearson"}.}
 
 \item{alternative}{Character string specifying the alternative hypothesis:
 \itemize{
@@ -38,6 +41,18 @@ constructing confidence intervals.}
 
 \item{IID}{Logical; if \code{FALSE}, inference is performed under time-series
 assumptions and a HAC variance estimator is used.}
+
+\item{variance}{Character string specifying the variance estimation method:
+\itemize{
+\item \code{"delta"} (default): delta-method / kernel-based variance
+\item \code{"ij"}: infinitesimal jackknife variance
+}
+
+The \code{"ij"} option is currently supported only for \code{"akc"}, \code{"agc"},
+\code{"cid"}, and \code{"cma"}. When \code{IID = FALSE}, the Bartlett-kernel HAC
+estimator is applied to the IJ influence function values.
+The independence variance uses the same closed-form formula regardless
+of the variance method.}
 }
 \value{
 An object of class \code{"acor_htest"}. For a single predictor, the
@@ -65,8 +80,8 @@ predictor-specific correlations with \code{Y} are equal. The returned object als
 includes individual predictor tests against the method-specific null value and
 all pairwise differences between predictors.
 
-Pearson, rho_b, tau_b, and gamma inference are currently
-implemented only for a single predictor.
+Pearson, rho_b, tau_b, and gamma inference are currently implemented
+only for a single predictor.
 
 In the multivariate case, \code{alternative} affects the individual predictor
 tests and pairwise differences. The top-level equality test remains a
@@ -101,6 +116,9 @@ test_result <- acor.test(x, y, method = "tau_b")
 
 # gamma inference
 test_result <- acor.test(x, y, method = "gamma")
+
+# Infinitesimal jackknife variance for AKC
+test_ij <- acor.test(x, y, method = "akc", variance = "ij")
 
 # Compare multiple predictors
 x1 <- rnorm(100)

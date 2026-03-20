@@ -466,3 +466,196 @@ test_that("acor.test() with IID = FALSE works for m >= 2 (CMA)", {
   expect_true(is.finite(result$statistic))
   expect_length(result$estimate, 3)
 })
+
+
+# ============================================================================
+# Section 9: Infinitesimal jackknife (IJ) variance — validation & smoke tests
+# ============================================================================
+
+test_that("acor.test() rejects variance='ij' for unsupported methods", {
+  set.seed(1234)
+  x <- rnorm(50); y <- rnorm(50)
+  for (m in c("tau_a", "tau_b", "rho_a", "rho_b", "gamma", "pearson")) {
+    expect_error(acor.test(x, y, method = m, variance = "ij"),
+                 "only supported for methods")
+  }
+})
+
+test_that("acor.test() with variance='ij' and IID=FALSE works for AKC", {
+  set.seed(1235)
+  x <- rnorm(200); y <- x + rnorm(200)
+  
+  res <- acor.test(x, y, method = "akc", variance = "ij", IID = FALSE)
+  expect_s3_class(res, "acor_htest")
+  expect_true(is.finite(res$statistic))
+  expect_true(res$variance > 0)
+  expect_true(res$variance_ind > 0)
+  expect_false(res$IID)
+})
+
+test_that("acor.test() with variance='ij' and IID=FALSE works for AGC", {
+  set.seed(1235)
+  x <- rnorm(200); y <- x + rnorm(200)
+  
+  res <- acor.test(x, y, method = "agc", variance = "ij", IID = FALSE)
+  expect_true(is.finite(res$statistic))
+  expect_true(res$variance > 0)
+  expect_false(res$IID)
+})
+
+test_that("IJ HAC variance >= IJ IID variance for AKC", {
+  set.seed(1240)
+  n <- 300
+  x <- as.numeric(arima.sim(list(ar = 0.5), n = n))
+  y <- x + as.numeric(arima.sim(list(ar = 0.5), n = n))
+  
+  res_iid <- acor.test(x, y, method = "akc", variance = "ij", IID = TRUE)
+  res_hac <- acor.test(x, y, method = "akc", variance = "ij", IID = FALSE)
+  
+  expect_equal(unname(res_iid$estimate), unname(res_hac$estimate), tolerance = 1e-10)
+  expect_true(res_hac$variance >= res_iid$variance * 0.5)
+})
+
+test_that("IJ HAC works for multivariate AKC", {
+  set.seed(1241)
+  y <- rnorm(150)
+  X <- cbind(y + rnorm(150, sd = 0.5), rnorm(150))
+  
+  res <- acor.test(X, y, method = "akc", variance = "ij", IID = FALSE)
+  expect_length(res$estimate, 2)
+  expect_true(is.matrix(res$variance))
+  expect_true(all(diag(res$variance) > 0))
+})
+
+test_that("acor.test() with variance='ij' works for multivariate AKC", {
+  set.seed(1236)
+  y <- rnorm(150)
+  X <- cbind(y + rnorm(150, sd = 0.5), rnorm(150), y + rnorm(150))
+  
+  res <- acor.test(X, y, method = "akc", variance = "ij")
+  expect_length(res$estimate, 3)
+  expect_true(is.matrix(res$variance))
+  expect_equal(dim(res$variance), c(3, 3))
+  expect_true(all(diag(res$variance) > 0))
+  expect_true(is.finite(res$statistic))
+  expect_true(res$p.value >= 0 && res$p.value <= 1)
+})
+
+test_that("acor.test() with variance='ij' works for multivariate AGC", {
+  set.seed(1237)
+  y <- rnorm(150)
+  X <- cbind(y + rnorm(150, sd = 0.5), rnorm(150))
+  
+  res <- acor.test(X, y, method = "agc", variance = "ij")
+  expect_length(res$estimate, 2)
+  expect_true(is.matrix(res$variance))
+  expect_equal(dim(res$variance), c(2, 2))
+  expect_true(all(diag(res$variance) > 0))
+})
+
+test_that("acor.test() with variance='ij' works for multivariate CID", {
+  set.seed(1238)
+  y <- rnorm(150)
+  X <- cbind(y + rnorm(150, sd = 0.5), rnorm(150))
+  
+  res <- acor.test(X, y, method = "cid", variance = "ij")
+  expect_length(res$estimate, 2)
+  expect_true(all(res$estimate > 0 & res$estimate < 1))
+})
+
+test_that("IJ multivariate diagonal matches univariate IJ variance", {
+  set.seed(1239)
+  y <- rnorm(200)
+  x1 <- y + rnorm(200, sd = 0.5)
+  x2 <- rnorm(200)
+  
+  res_mv <- acor.test(cbind(x1, x2), y, method = "akc", variance = "ij")
+  res_u1 <- acor.test(x1, y, method = "akc", variance = "ij")
+  res_u2 <- acor.test(x2, y, method = "akc", variance = "ij")
+  
+  expect_equal(res_mv$variance[1, 1], res_u1$variance, tolerance = 1e-10)
+  expect_equal(res_mv$variance[2, 2], res_u2$variance, tolerance = 1e-10)
+})
+
+test_that("acor.test() with variance='ij' works for AKC", {
+  set.seed(2001)
+  x <- rnorm(200); y <- x + rnorm(200)
+  
+  res <- acor.test(x, y, method = "akc", variance = "ij")
+  expect_s3_class(res, "acor_htest")
+  expect_true(is.finite(res$statistic))
+  expect_true(res$p.value >= 0 && res$p.value <= 1)
+  expect_true(res$variance > 0)
+  expect_true(res$variance_ind > 0)
+  expect_true(!is.null(res$statistic_ind))
+  expect_true(!is.null(res$p.value_ind))
+  expect_equal(res$variance_method, "ij")
+})
+
+test_that("acor.test() with variance='ij' works for AGC", {
+  set.seed(2002)
+  x <- rnorm(200); y <- x + rnorm(200)
+  
+  res <- acor.test(x, y, method = "agc", variance = "ij")
+  expect_s3_class(res, "acor_htest")
+  expect_true(is.finite(res$statistic))
+  expect_true(res$p.value >= 0 && res$p.value <= 1)
+  expect_true(res$variance > 0)
+  expect_true(res$variance_ind > 0)
+  expect_equal(res$variance_method, "ij")
+})
+
+test_that("acor.test() with variance='ij' works for CID and CMA", {
+  set.seed(2003)
+  x <- rnorm(200); y <- x + rnorm(200)
+  
+  res_cid <- acor.test(x, y, method = "cid", variance = "ij")
+  res_cma <- acor.test(x, y, method = "cma", variance = "ij")
+  
+  expect_true(res_cid$estimate > 0 && res_cid$estimate < 1)
+  expect_true(res_cma$estimate > 0 && res_cma$estimate < 1)
+  expect_true(res_cid$variance_ind > 0)
+  expect_true(res_cma$variance_ind > 0)
+})
+
+test_that("IJ and delta give same point estimate for AKC", {
+  set.seed(2004)
+  x <- rnorm(200); y <- x + rnorm(200)
+  
+  res_delta <- acor.test(x, y, method = "akc", variance = "delta")
+  res_ij    <- acor.test(x, y, method = "akc", variance = "ij")
+  
+  expect_equal(unname(res_ij$estimate), unname(res_delta$estimate),
+               tolerance = 1e-10)
+})
+
+test_that("IJ and delta give same point estimate for AGC", {
+  set.seed(2005)
+  x <- rnorm(200); y <- x + rnorm(200)
+  
+  res_delta <- acor.test(x, y, method = "agc", variance = "delta")
+  res_ij    <- acor.test(x, y, method = "agc", variance = "ij")
+  
+  expect_equal(unname(res_ij$estimate), unname(res_delta$estimate),
+               tolerance = 1e-10)
+})
+
+test_that("IJ and delta give identical independence variance for AKC", {
+  set.seed(2006)
+  x <- rnorm(200); y <- x + rnorm(200)
+  
+  res_delta <- acor.test(x, y, method = "akc", variance = "delta")
+  res_ij    <- acor.test(x, y, method = "akc", variance = "ij")
+  
+  expect_equal(res_ij$variance_ind, res_delta$variance_ind, tolerance = 1e-12)
+})
+
+test_that("IJ and delta give identical independence variance for AGC", {
+  set.seed(2007)
+  x <- rnorm(200); y <- x + rnorm(200)
+  
+  res_delta <- acor.test(x, y, method = "agc", variance = "delta")
+  res_ij    <- acor.test(x, y, method = "agc", variance = "ij")
+  
+  expect_equal(res_ij$variance_ind, res_delta$variance_ind, tolerance = 1e-12)
+})

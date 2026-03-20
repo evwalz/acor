@@ -7,8 +7,8 @@
 acor(
   X,
   Y,
-  method = c("pearson", "akc", "agc", "cid", "cma", "tau_a", "tau_b",
-    "gamma", "rho_a", "rho_b")
+  method = c("pearson", "akc", "agc", "cid", "cma", "tau_a", "tau_b", "gamma", "rho_a",
+    "rho_b")
 )
 }
 \arguments{

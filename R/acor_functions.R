@@ -129,6 +129,15 @@ print.acor <- function(x, ...) {
 #'   constructing confidence intervals.
 #' @param IID Logical; if `FALSE`, inference is performed under time-series
 #'   assumptions and a HAC variance estimator is used.
+#' @param variance Character string specifying the variance estimation method:
+#'   * `"delta"` (default): delta-method / kernel-based variance
+#'   * `"ij"`: infinitesimal jackknife variance
+#'
+#'   The `"ij"` option is currently supported only for `"akc"`, `"agc"`,
+#'   `"cid"`, and `"cma"`. When `IID = FALSE`, the Bartlett-kernel HAC
+#'   estimator is applied to the IJ influence function values.
+#'   The independence variance uses the same closed-form formula regardless
+#'   of the variance method.
 #' 
 #' @return An object of class `"acor_htest"`. For a single predictor, the
 #'   result also inherits from `"htest"` and contains the estimate, its
@@ -188,6 +197,9 @@ print.acor <- function(x, ...) {
 #' # gamma inference
 #' test_result <- acor.test(x, y, method = "gamma")
 #' 
+#' # Infinitesimal jackknife variance for AKC
+#' test_ij <- acor.test(x, y, method = "akc", variance = "ij")
+#'
 #' # Compare multiple predictors
 #' x1 <- rnorm(100)
 #' x2 <- rnorm(100)
@@ -202,12 +214,14 @@ acor.test <- function(X, Y,
                       alternative = c("two.sided", "less", "greater"),
                       conf.level = 0.95,
                       fisher = FALSE, 
-                      IID = TRUE
+                      IID = TRUE,
+                      variance = c("delta", "ij")
 ) {
   
   dname <- paste(deparse(substitute(X)), "and", deparse(substitute(Y)))
   method <- match.arg(method)
   alternative <- match.arg(alternative)
+  variance_method <- match.arg(variance)
   if (!is.numeric(conf.level) || length(conf.level) != 1 || is.na(conf.level) ||
       conf.level <= 0 || conf.level >= 1) {
     stop("'conf.level' must be a single number between 0 and 1")
@@ -220,6 +234,14 @@ acor.test <- function(X, Y,
   m <- validated$m
   if (n < 3) {
     stop("At least 3 observations are required")
+  }
+  
+  if (variance_method == "ij") {
+    ij_methods <- c("akc", "agc", "cid", "cma")
+    if (!(method %in% ij_methods)) {
+      stop("variance = \"ij\" is only supported for methods: ",
+           paste(ij_methods, collapse = ", "))
+    }
   }
   
   # Pre-compute ranks for methods that need them
@@ -249,39 +271,61 @@ acor.test <- function(X, Y,
   # Compute correlation(s) - this already handles variance correctly
   # Compute estimates and variance based on method
   if (method %in% c("akc", "cid")) {
-    # Use Kendall framework
-    version <- select_kernel_version(Y, X)
     
-    if (m == 1) {
-      result <- compute_akc_variance_auto(X[, 1], Y, IID = IID, version = version)
-      akc_val <- result$akc
-      var_akc <- result$var
-      var_akc_ind <- result$var_ind  # Independence variance from main function
+    if (variance_method == "ij") {
+      p_Y <- compute_tau_Y(Y)$p_tie_y
       
-      if (method == "cid") {
-        estimates <- (akc_val + 1) / 2
-        variance <- var_akc / 4  # Var((X+1)/2) = Var(X)/4
-        variance_ind <- var_akc_ind / 4
+      if (m == 1) {
+        result <- akc_ij_cpp(X[, 1], Y)
+        akc_vals <- result$akc
+        ic <- result$ic
+        if (IID) {
+          Sigma_akc <- result$var_ij
+          Sigma_akc_ind <- ind_variance_akc_iid(X[, 1], Y, p_Y)
+        } else {
+          Sigma_akc <- hac_variance_univariate(ic, scale_factor = 1)
+          Sigma_akc_ind <- ind_variance_akc_hac(X[, 1], Y, p_Y)
+        }
       } else {
-        estimates <- akc_val
-        variance <- var_akc
-        variance_ind <- var_akc_ind
+        IC_mat <- matrix(0, nrow = n, ncol = m)
+        akc_vals <- numeric(m)
+        for (k in seq_len(m)) {
+          res_k <- akc_ij_cpp(X[, k], Y)
+          akc_vals[k] <- res_k$akc
+          IC_mat[, k] <- res_k$ic
+        }
+        if (IID) {
+          Sigma_akc <- crossprod(IC_mat) / n
+          Sigma_akc_ind <- ind_covariance_akc_iid(X, Y, p_Y)
+        } else {
+          Sigma_akc <- hac_covariance_multivariate(IC_mat, scale_factor = 1)
+          Sigma_akc_ind <- ind_covariance_akc_hac(X, Y, p_Y)
+        }
       }
     } else {
-      result <- compute_akc_multivariate_variance_auto(X, Y, IID = IID, version = version)
-      akcs <- result$akc_vector
-      Sigma <- result$Sigma
-      Sigma_ind <- result$Sigma_ind  # Independence covariance from main function
-      
-      if (method == "cid") {
-        estimates <- (akcs + 1) / 2
-        variance <- Sigma / 4
-        variance_ind <- Sigma_ind / 4
+      if (m == 1) {
+        version <- select_kernel_version(Y, X)
+        result <- compute_akc_variance_auto(X[, 1], Y, IID = IID, version = version)
+        akc_vals <- result$akc
+        Sigma_akc <- result$var
+        Sigma_akc_ind <- result$var_ind
       } else {
-        estimates <- akcs
-        variance <- Sigma
-        variance_ind <- Sigma_ind
+        version <- select_kernel_version(Y, X)
+        result <- compute_akc_multivariate_variance_auto(X, Y, IID = IID, version = version)
+        akc_vals <- result$akc_vector
+        Sigma_akc <- result$Sigma
+        Sigma_akc_ind <- result$Sigma_ind
       }
+    }
+
+    if (method == "cid") {
+      estimates <- (akc_vals + 1) / 2
+      variance <- Sigma_akc / 4
+      variance_ind <- Sigma_akc_ind / 4
+    } else {
+      estimates <- akc_vals
+      variance <- Sigma_akc
+      variance_ind <- Sigma_akc_ind
     }
   } else if (method == "tau_a") {
     version <- select_kernel_version(Y, X)
@@ -355,37 +399,67 @@ acor.test <- function(X, Y,
     
   } else {
     
-    if (m == 1) {
-      result <- compute_agc_variance_auto(y_ranks, x_ranks, IID = IID)
-      agc_val <- result$agc
-      var_agc <- result$var
-      var_agc_ind <- result$var_ind  # Asymptotic variance for AGC
+    if (variance_method == "ij") {
+      y_ij_rank <- rank(Y, ties.method = "average")
+      pre_ij <- agc_y_preamble(y_ij_rank)
+      b_ij <- floor(2 * n^(1 / 3))
       
-      if (method == "cma") {
-        estimates <- (agc_val + 1) / 2
-        variance <- var_agc / 4  # Var((X+1)/2) = Var(X)/4
-        variance_ind <- var_agc_ind / 4
-      } else {  # agc
-        estimates <- agc_val
-        variance <- var_agc
-        variance_ind <- var_agc_ind 
+      if (m == 1) {
+        result <- agc_ij_cpp(X[, 1], Y)
+        agc_vals <- result$agc
+        ic <- result$ic
+        x_ij_rank <- rank(X[, 1], ties.method = "average")
+        if (IID) {
+          Sigma_agc <- result$var_ij
+          Sigma_agc_ind <- ind_variance_agc_iid(x_ij_rank, pre_ij$N, pre_ij$zeta_3Y)
+        } else {
+          Sigma_agc <- hac_variance_univariate(ic, scale_factor = 1)
+          Sigma_agc_ind <- ind_variance_agc_hac(x_ij_rank, y_ij_rank,
+                                                pre_ij$N, pre_ij$zeta_3Y, b_ij)
+        }
+      } else {
+        IC_mat <- matrix(0, nrow = n, ncol = m)
+        agc_vals <- numeric(m)
+        for (k in seq_len(m)) {
+          res_k <- agc_ij_cpp(X[, k], Y)
+          agc_vals[k] <- res_k$agc
+          IC_mat[, k] <- res_k$ic
+        }
+        xarray_ij_ranks <- matrix(0, nrow = m, ncol = n)
+        for (k in seq_len(m)) {
+          xarray_ij_ranks[k, ] <- rank(X[, k], ties.method = "average")
+        }
+        if (IID) {
+          Sigma_agc <- crossprod(IC_mat) / n
+          Sigma_agc_ind <- ind_covariance_agc_iid(xarray_ij_ranks, pre_ij$N, pre_ij$zeta_3Y)
+        } else {
+          Sigma_agc <- hac_covariance_multivariate(IC_mat, scale_factor = 1)
+          Sigma_agc_ind <- ind_covariance_agc_hac(xarray_ij_ranks, y_ij_rank,
+                                                  pre_ij$N, pre_ij$zeta_3Y, b_ij)
+        }
       }
-    } else {  # m >= 2
-      
-      result <- compute_agc_multivariate_variance_auto(y_ranks, xarray_ranks, IID = IID)
-      agcs <- result$agc_vector
-      Sigma_agc_mat <- result$Sigma
-      Sigma_agc_ind <- result$Sigma_ind
-      
-      if (method == "cma") {
-        estimates <- (agcs + 1) / 2
-        variance <- Sigma_agc_mat / 4
-        variance_ind <- Sigma_agc_ind / 4
-      } else {  # agc
-        estimates <- agcs
-        variance <- Sigma_agc_mat
-        variance_ind <- Sigma_agc_ind
+    } else {
+      if (m == 1) {
+        result <- compute_agc_variance_auto(y_ranks, x_ranks, IID = IID)
+        agc_vals <- result$agc
+        Sigma_agc <- result$var
+        Sigma_agc_ind <- result$var_ind
+      } else {
+        result <- compute_agc_multivariate_variance_auto(y_ranks, xarray_ranks, IID = IID)
+        agc_vals <- result$agc_vector
+        Sigma_agc <- result$Sigma
+        Sigma_agc_ind <- result$Sigma_ind
       }
+    }
+    
+    if (method == "cma") {
+      estimates <- (agc_vals + 1) / 2
+      variance <- Sigma_agc / 4
+      variance_ind <- Sigma_agc_ind / 4
+    } else {  # agc
+      estimates <- agc_vals
+      variance <- Sigma_agc
+      variance_ind <- Sigma_agc_ind
     }
   }
   
@@ -402,20 +476,27 @@ acor.test <- function(X, Y,
     se <- sqrt(variance / n)
     test_stat <- (estimates - null.value) / se
     
-    # Independence variance test
-    se_ind <- sqrt(variance_ind / n)
-    test_stat_ind <- (estimates - null.value) / se_ind
+    # Independence variance test (NULL when variance = "ij")
+    if (!is.null(variance_ind)) {
+      se_ind <- sqrt(variance_ind / n)
+      test_stat_ind <- (estimates - null.value) / se_ind
+    } else {
+      test_stat_ind <- NULL
+    }
     
     # Compute p-values based on alternative
     if (alternative == "two.sided") {
       p_value <- 2 * (1 - stats::pnorm(abs(test_stat)))
-      p_value_ind <- 2 * (1 - stats::pnorm(abs(test_stat_ind)))
+      p_value_ind <- if (!is.null(test_stat_ind))
+        2 * (1 - stats::pnorm(abs(test_stat_ind))) else NULL
     } else if (alternative == "greater") {
       p_value <- 1 - stats::pnorm(test_stat)
-      p_value_ind <- 1 - stats::pnorm(test_stat_ind)
+      p_value_ind <- if (!is.null(test_stat_ind))
+        1 - stats::pnorm(test_stat_ind) else NULL
     } else {  # less
       p_value <- stats::pnorm(test_stat)
-      p_value_ind <- stats::pnorm(test_stat_ind)
+      p_value_ind <- if (!is.null(test_stat_ind))
+        stats::pnorm(test_stat_ind) else NULL
     }
     
     # Confidence interval
@@ -451,13 +532,14 @@ acor.test <- function(X, Y,
       CI <- c(estimates - z_alpha * se, estimates + z_alpha * se)
     }
     
-    ## versus htest object:
+    stat_ind_named <- if (!is.null(test_stat_ind)) c(z_ind = test_stat_ind) else NULL
+    
     out <- structure(list(
      statistic = c(z = test_stat),
-     statistic_ind = c(z_ind = test_stat_ind),
+     statistic_ind = stat_ind_named,
      p.value = p_value,
      p.value_ind = p_value_ind,
-     estimate = stats::setNames(estimates, method),  # or whichever method
+     estimate = stats::setNames(estimates, method),
      variance = variance,
      variance_ind = variance_ind,
      Fisher = fisher,
@@ -466,7 +548,8 @@ acor.test <- function(X, Y,
      method = paste(toupper(method), "test"),
      data.name = dname,
      conf.int = structure(CI, conf.level = conf.level),
-     IID = IID
+     IID = IID,
+     variance_method = variance_method
     ), class = c("acor_htest", "htest"))
     
   } else {
@@ -658,6 +741,9 @@ acor.test <- function(X, Y,
 print.acor_htest <- function(x, ...) {
   cat("\n\t", x$method, "\n\n")
   cat("data: ", x$data.name, "\n")
+  if (!is.null(x$variance_method) && x$variance_method == "ij") {
+    cat("variance: infinitesimal jackknife\n")
+  }
   
   if (length(x$estimate) == 1) {
     # --- Single predictor ---
