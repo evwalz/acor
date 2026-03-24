@@ -80,8 +80,7 @@ predictor-specific correlations with \code{Y} are equal. The returned object als
 includes individual predictor tests against the method-specific null value and
 all pairwise differences between predictors.
 
-Pearson, rho_b, tau_b, and gamma inference are currently implemented
-only for a single predictor.
+Multivariate inference (matrix \code{X}) is available for all \code{method} values.
 
 In the multivariate case, \code{alternative} affects the individual predictor
 tests and pairwise differences. The top-level equality test remains a

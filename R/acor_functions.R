@@ -162,8 +162,7 @@ print.acor <- function(x, ...) {
 #' includes individual predictor tests against the method-specific null value and
 #' all pairwise differences between predictors.
 #'
-#' Pearson, rho_b, tau_b, and gamma inference are currently implemented
-#' only for a single predictor.
+#' Multivariate inference (matrix `X`) is available for all `method` values.
 #'
 #' In the multivariate case, `alternative` affects the individual predictor
 #' tests and pairwise differences. The top-level equality test remains a
@@ -343,24 +342,31 @@ acor.test <- function(X, Y,
     } 
   } else if (method == "tau_b") {
     version <- select_kernel_version(Y, X)
-    
+
     if (m == 1) {
       result <- compute_tau_b_variance(X[, 1], Y, IID = IID, version = version)
       estimates <- result$tau_b
       variance <- result$var
       variance_ind <- result$var_ind
     } else {
-      stop("Multivariate tau_b inference is not yet implemented in acor.test()")
+      result <- compute_tau_b_multivariate_variance(X, Y, IID = IID, version = version)
+      estimates <- result$tau_b_vector
+      variance <- result$Sigma
+      variance_ind <- result$Sigma_ind
     }
   } else if (method == "gamma") {
     version <- select_kernel_version(Y, X)
-    if (m != 1) {
-      stop("Multivariate gamma inference is not yet implemented in acor.test()")
+    if (m == 1) {
+      result <- compute_gamma_variance(X[, 1], Y, IID = IID, version = version)
+      estimates <- result$gamma
+      variance <- result$var
+      variance_ind <- result$var_ind
+    } else {
+      result <- compute_gamma_multivariate_variance(X, Y, IID = IID, version = version)
+      estimates <- result$gamma_vector
+      variance <- result$Sigma
+      variance_ind <- result$Sigma_ind
     }
-    result <- compute_gamma_variance(X[, 1], Y, IID = IID, version = version)
-    estimates <- result$gamma
-    variance <- result$var
-    variance_ind <- result$var_ind
   } else if (method == "rho_a") {
     
     if (m == 1) {
@@ -383,7 +389,10 @@ acor.test <- function(X, Y,
       variance <- result$var
       variance_ind <- result$var_ind
     } else {
-      stop("Multivariate rho_b inference is not yet implemented in acor.test()")
+      result <- compute_rho_b_multivariate_variance(X, Y, IID = IID)
+      estimates <- result$rho_b_vector
+      variance <- result$Sigma
+      variance_ind <- result$Sigma_ind
     }
     
   } else if (method == "pearson") {

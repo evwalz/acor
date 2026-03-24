@@ -101,8 +101,7 @@ compute_pearson_variance <- function(X, Y, IID = TRUE) {
 #' IID independence covariance for multivariate Pearson
 #'
 #' Under independence of X and Y, the influence function reduces to
-#' X_k_std * Y_std (since r_k = 0), so Cov(r_k, r_l) = E[X_k_std * X_l_std].
-#' This is simply the correlation matrix of the predictors.
+#' the correlation matrix of the predictors.
 #'
 #' @param X Numeric matrix (n x m).
 #' @return m x m independence covariance matrix.

@@ -246,13 +246,17 @@ rho_b_kernel_components <- function(X, Y) {
 }
 
 #' IID covariance matrix for rho_b delta method
+#'
+#' Uses the factor \code{9} on every block, matching the \eqn{\rho_{xy}} / AGC
+#' kernel scale (\code{9 * mean(k_\rho^2)} for \eqn{\rho_a}) and the same
+#' scaling used in \code{rho_b_hac_covariance()} for all three components.
 #' @keywords internal
 #' @noRd
 rho_b_iid_covariance <- function(k_rho, k_rho_x, k_rho_y) {
   Sigma <- matrix(0, nrow = 3, ncol = 3)
   Sigma[1, 1] <- 9 * mean(k_rho^2)
-  Sigma[2, 2] <- 4 * mean(k_rho_x^2)
-  Sigma[3, 3] <- 4 * mean(k_rho_y^2)
+  Sigma[2, 2] <- 9 * mean(k_rho_x^2)
+  Sigma[3, 3] <- 9 * mean(k_rho_y^2)
   Sigma[1, 2] <- Sigma[2, 1] <- 9 * mean(k_rho * k_rho_x)
   Sigma[1, 3] <- Sigma[3, 1] <- 9 * mean(k_rho * k_rho_y)
   Sigma[2, 3] <- Sigma[3, 2] <- 9 * mean(k_rho_x * k_rho_y)
@@ -322,4 +326,145 @@ compute_rho_b_variance <- function(X, Y, IID = TRUE) {
   }
 
   list(rho_b = comps$rho_b, var = var_est, var_ind = var_ind)
+}
+
+
+#' Independence covariance for multivariate rho-b (IID)
+#'
+#' Under independence, \eqn{\Sigma^{(k,l)} = \Sigma_{\rho_a}^{(k,l)} /
+#' (\sqrt{\tilde B_k \tilde B_l}\,\tilde C)} with \eqn{\tilde B_k = 1-\gamma_F^{(k)}},
+#' \eqn{\tilde C = 1-\gamma_G} (\code{rho_self} margins).  Diagonals equal \eqn{1},
+#' matching \code{ind_variance_rho_b_iid()}.
+#'
+#' @param X Numeric matrix \code{n x m} of predictors.
+#' @param Y Numeric outcome vector length \code{n}.
+#' @return \code{m x m} matrix.
+#' @keywords internal
+#' @noRd
+ind_covariance_rho_b_iid <- function(X, Y) {
+  X <- ensure_matrix(X)
+  n <- nrow(X)
+  m <- ncol(X)
+  y_rank <- rank(Y, ties.method = "average")
+  xarray_ranks <- matrix(0, nrow = m, ncol = n)
+  B <- numeric(m)
+  for (k in seq_len(m)) {
+    xarray_ranks[k, ] <- rank(X[, k], ties.method = "average")
+    B[k] <- rho_b_rank_preamble(xarray_ranks[k, ])$rho_self
+  }
+  C <- rho_b_rank_preamble(y_rank)$rho_self
+  pre_y <- agc_y_preamble(y_rank)
+  sta <- ind_covariance_rho_a_iid(xarray_ranks, n, pre_y$zeta_3Y)
+  Sigma <- matrix(0, nrow = m, ncol = m)
+  for (k in seq_len(m)) {
+    Sigma[k, k] <- sta[k, k] / (B[k] * C)
+  }
+  for (k in seq_len(m)) {
+    for (l in seq_len(m)) {
+      if (k != l) {
+        Sigma[k, l] <- sta[k, l] / (sqrt(B[k] * B[l]) * C)
+      }
+    }
+  }
+  Sigma
+}
+
+
+#' Independence covariance for multivariate rho-b (HAC)
+#' @keywords internal
+#' @noRd
+ind_covariance_rho_b_hac <- function(X, Y) {
+  X <- ensure_matrix(X)
+  n <- nrow(X)
+  m <- ncol(X)
+  b <- floor(2 * n^(1 / 3))
+  y_rank <- rank(Y, ties.method = "average")
+  xarray_ranks <- matrix(0, nrow = m, ncol = n)
+  B <- numeric(m)
+  for (k in seq_len(m)) {
+    xarray_ranks[k, ] <- rank(X[, k], ties.method = "average")
+    B[k] <- rho_b_rank_preamble(xarray_ranks[k, ])$rho_self
+  }
+  C <- rho_b_rank_preamble(y_rank)$rho_self
+  sta <- ind_covariance_rho_a_hac(xarray_ranks, y_rank, n, b)
+  Sigma <- matrix(0, nrow = m, ncol = m)
+  for (k in seq_len(m)) {
+    Sigma[k, k] <- ind_variance_rho_a_hac(xarray_ranks[k, ], y_rank, n, b) / (B[k] * C)
+  }
+  for (k in seq_len(m)) {
+    for (l in seq_len(m)) {
+      if (k != l) {
+        Sigma[k, l] <- sta[k, l] / (sqrt(B[k] * B[l]) * C)
+      }
+    }
+  }
+  Sigma
+}
+
+
+#' Multivariate Spearman rho-b with covariance matrix
+#'
+#' Same \eqn{(2m+1)}-dimensional influence stack and \eqn{J \Sigma_\theta J^\top}
+#' construction as \code{compute_tau_b_multivariate_variance()}, with Spearman
+#' kernels scaled by \eqn{3} (so \eqn{\Sigma_\theta = n^{-1}\Psi^\top\Psi} matches
+#' factor \eqn{9} in \code{rho_b_iid_covariance()}) and \code{rho_b_gradient} per row.
+#'
+#' @param X Numeric matrix \code{n x m}.
+#' @param Y Numeric outcome vector.
+#' @param IID Logical; IID or HAC for the main covariance.
+#' @return List with \code{rho_b_vector}, \code{Sigma}, \code{Sigma_ind}.
+#' @keywords internal
+#' @noRd
+compute_rho_b_multivariate_variance <- function(X, Y, IID = TRUE) {
+  X <- ensure_matrix(X)
+  n <- nrow(X)
+  m <- ncol(X)
+  y_rank <- rank(Y, ties.method = "average")
+  kernel_fn <- if (is_binary(Y)) kfn_binary else kfn_v2
+
+  pre_y <- rho_b_rank_preamble(y_rank)
+  sy <- pre_y$rho_self
+  ky <- pre_y$k_self
+
+  rho_vec <- numeric(m)
+  sx_vec <- numeric(m)
+  Psi <- matrix(0, nrow = n, ncol = 2 * m + 1)
+
+  for (k in seq_len(m)) {
+    x_rank <- rank(X[, k], ties.method = "average")
+    rho_vec[k] <- comp_spearman_rho_a(y_rank, x_rank)
+    pre_x <- rho_b_rank_preamble(x_rank)
+    sx_vec[k] <- pre_x$rho_self
+    Psi[, 2 * k - 1] <- 3 * kernel_fn(y_rank, x_rank, rho_vec[k])
+    Psi[, 2 * k] <- 3 * pre_x$k_self
+  }
+  Psi[, 2 * m + 1] <- 3 * ky
+
+  if (IID) {
+    Sigma_theta <- crossprod(Psi) / n
+  } else {
+    Sigma_theta <- crossprod(Psi) / n + hac_correction_multivariate(Psi)
+  }
+
+  J <- matrix(0, nrow = m, ncol = 2 * m + 1)
+  for (k in seq_len(m)) {
+    g <- rho_b_gradient(rho_vec[k], sx_vec[k], sy)
+    J[k, 2 * (k - 1) + 1] <- g[1]
+    J[k, 2 * k] <- g[2]
+    J[k, 2 * m + 1] <- g[3]
+  }
+
+  Sigma <- J %*% Sigma_theta %*% t(J)
+
+  rho_b_vector <- vapply(seq_len(m), function(k) {
+    comp_spearman_rho_b(y_rank, rank(X[, k], ties.method = "average"))
+  }, numeric(1))
+
+  if (IID) {
+    Sigma_ind <- ind_covariance_rho_b_iid(X, Y)
+  } else {
+    Sigma_ind <- ind_covariance_rho_b_hac(X, Y)
+  }
+
+  list(rho_b_vector = rho_b_vector, Sigma = Sigma, Sigma_ind = Sigma_ind)
 }

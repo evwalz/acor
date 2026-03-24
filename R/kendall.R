@@ -221,7 +221,63 @@ tau_b_hac_cross_lrv <- function(k1, k2, N, b) {
   4 * sum(c(sort(w), 1, w) * k_cross)
 }
 
+
+#' Delta-method gradient for tau_b = tau / sqrt(sx * sy)
+#'
+#' Matches \code{kendall_tau_b}: \code{sx}, \code{sy} are \code{tau_self} margins
+#' (\eqn{\widehat{\tau}(X,X)}, \eqn{\widehat{\tau}(Y,Y)} in the pair-tie sense).
+#'
+#' @param tau Kendall tau-a expectation \eqn{\tau(X,Y)} (plug-in).
+#' @param sx,sy Marginal \code{tau_self} values.
+#' @return Length-3 vector \eqn{(\partial h/\partial\tau, \partial h/\partial s_x,
+#'   \partial h/\partial s_y)} for \eqn{h = \tau/\sqrt{s_x s_y}}.
+#' @keywords internal
+#' @noRd
+tau_b_gradient <- function(tau, sx, sy) {
+  c(
+    1 / sqrt(sx * sy),
+    -tau / (2 * sx^(3 / 2) * sqrt(sy)),
+    -tau / (2 * sy^(3 / 2) * sqrt(sx))
+  )
+}
+
+
+#' IID asymptotic covariance for (tau, sx, sy) influence components
+#' @keywords internal
+#' @noRd
+tau_b_iid_covariance <- function(k_tau, k_sx, k_sy) {
+  S <- matrix(0, 3, 3)
+  S[1, 1] <- 4 * mean(k_tau^2)
+  S[2, 2] <- 4 * mean(k_sx^2)
+  S[3, 3] <- 4 * mean(k_sy^2)
+  S[1, 2] <- S[2, 1] <- 4 * mean(k_tau * k_sx)
+  S[1, 3] <- S[3, 1] <- 4 * mean(k_tau * k_sy)
+  S[2, 3] <- S[3, 2] <- 4 * mean(k_sx * k_sy)
+  S
+}
+
+
+#' HAC long-run covariance matrix for (tau, sx, sy) components
+#' @keywords internal
+#' @noRd
+tau_b_hac_covariance <- function(k_tau, k_sx, k_sy, N, b) {
+  S <- matrix(0, 3, 3)
+  S[1, 1] <- tau_b_hac_lrv(k_tau, N, b)
+  S[2, 2] <- tau_b_hac_lrv(k_sx, N, b)
+  S[3, 3] <- tau_b_hac_lrv(k_sy, N, b)
+  S[1, 2] <- S[2, 1] <- tau_b_hac_cross_lrv(k_tau, k_sx, N, b)
+  S[1, 3] <- S[3, 1] <- tau_b_hac_cross_lrv(k_tau, k_sy, N, b)
+  S[2, 3] <- S[3, 2] <- tau_b_hac_cross_lrv(k_sx, k_sy, N, b)
+  S
+}
+
+
 #' Compute tau_b with variance
+#'
+#' Point estimate is \code{kendall_tau_b} = \eqn{\tau(X,Y)/\sqrt{s_x s_y}} with
+#' \code{sx, sy = tau_self} from \code{tau_b_tie_preamble}.  Main variance uses
+#' the delta method for that ratio (same structure as \code{rho_b}).
+#'
 #' @keywords internal
 #' @noRd
 compute_tau_b_variance <- function(X, Y, IID = TRUE, version = "v2") {
@@ -232,55 +288,165 @@ compute_tau_b_variance <- function(X, Y, IID = TRUE, version = "v2") {
 
   pre_x <- tau_b_tie_preamble(X)
   pre_y <- tau_b_tie_preamble(Y)
+  sx <- pre_x$tau_self
+  sy <- pre_y$tau_self
 
   K_tau_fn <- if (version == "v1") K_tau_vec_v1 else K_tau_vec_v2
   k_tau <- K_tau_fn(X, Y, tau)
   k_tau_x <- pre_x$k_self
   k_tau_y <- pre_y$k_self
 
+  grad <- tau_b_gradient(tau, sx, sy)
+
   if (IID) {
-    var_tau <- 4 * mean(k_tau^2)
-    var_tau_x <- 4 * mean(k_tau_x^2)
-    var_tau_y <- 4 * mean(k_tau_y^2)
-    var_tautau_x <- 4 * mean(k_tau * k_tau_x)
-    var_tautau_y <- 4 * mean(k_tau * k_tau_y)
-    var_tau_xtau_y <- 4 * mean(k_tau_x * k_tau_y)
-
-    var_est <- (
-      var_tau -
-        tau * (var_tautau_x / pre_x$tau_self - var_tautau_y / pre_y$tau_self) +
-        tau^2 / 4 * (
-          var_tau_x / pre_x$tau_self^2 +
-            var_tau_y / pre_y$tau_self^2 +
-            (2 * var_tau_xtau_y) / (pre_y$tau_self * pre_x$tau_self)
-        )
-    ) / (pre_x$tau_self * pre_y$tau_self)
-
+    S <- tau_b_iid_covariance(k_tau, k_tau_x, k_tau_y)
+    var_est <- as.numeric(t(grad) %*% S %*% grad)
     var_ind <- 4 / 9 * (1 - pre_x$tie_prob3) * (1 - pre_y$tie_prob3) /
       (pre_x$denom_ind * pre_y$denom_ind)
   } else {
     b <- floor(2 * N^(1 / 3))
-    sigma_tau_sq <- tau_b_hac_lrv(k_tau, N, b)
-    sigma_tau_x_sq <- tau_b_hac_lrv(k_tau_x, N, b)
-    sigma_tau_y_sq <- tau_b_hac_lrv(k_tau_y, N, b)
-    sigma_tautau_x <- tau_b_hac_cross_lrv(k_tau, k_tau_x, N, b)
-    sigma_tautau_y <- tau_b_hac_cross_lrv(k_tau, k_tau_y, N, b)
-    sigma_tau_xtau_y <- tau_b_hac_cross_lrv(k_tau_x, k_tau_y, N, b)
-
-    var_est <- (
-      sigma_tau_sq -
-        tau * (sigma_tautau_x / pre_x$tau_self - sigma_tautau_y / pre_y$tau_self) +
-        tau^2 / 4 * (
-          sigma_tau_x_sq / pre_x$tau_self^2 +
-            sigma_tau_y_sq / pre_y$tau_self^2 +
-            (2 * sigma_tau_xtau_y) / (pre_x$tau_self * pre_y$tau_self)
-        )
-    ) / (pre_x$tau_self * pre_y$tau_self)
-
+    S <- tau_b_hac_covariance(k_tau, k_tau_x, k_tau_y, N, b)
+    var_est <- as.numeric(t(grad) %*% S %*% grad)
     var_ind <- ind_variance_tau_a_hac(X, Y) / (pre_x$denom_ind * pre_y$denom_ind)
   }
 
   list(tau_b = tau_b, var = var_est, var_ind = var_ind)
+}
+
+
+#' Independence covariance for multivariate tau-b (IID)
+#'
+#' Under independence, off-diagonals scale with \eqn{\sqrt{\mathrm{denom}_{x,k}
+#' \mathrm{denom}_{x,l}}\,\mathrm{denom}_y}; diagonals match univariate
+#' \code{compute_tau_b_variance()$var_ind}.
+#'
+#' @param X Numeric matrix \code{n x m}.
+#' @param Y Numeric vector length \code{n}.
+#' @return \code{m x m} matrix.
+#' @keywords internal
+#' @noRd
+ind_covariance_tau_b_iid <- function(X, Y) {
+  X <- ensure_matrix(X)
+  m <- ncol(X)
+  denom_x <- numeric(m)
+  pre_x_list <- vector("list", m)
+  for (k in seq_len(m)) {
+    pre_x_list[[k]] <- tau_b_tie_preamble(X[, k])
+    denom_x[k] <- pre_x_list[[k]]$denom_ind
+  }
+  pre_y <- tau_b_tie_preamble(Y)
+  denom_y <- pre_y$denom_ind
+  sta <- ind_covariance_tau_a_iid(X, Y)
+  Sigma <- matrix(0, nrow = m, ncol = m)
+  # Diagonal: same closed form as univariate compute_tau_b_variance()$var_ind (IID)
+  for (k in seq_len(m)) {
+    px <- pre_x_list[[k]]
+    Sigma[k, k] <- (4 / 9) * (1 - px$tie_prob3) * (1 - pre_y$tie_prob3) /
+      (px$denom_ind * pre_y$denom_ind)
+  }
+  for (k in seq_len(m)) {
+    for (l in seq_len(m)) {
+      if (k != l) {
+        Sigma[k, l] <- sta[k, l] / (sqrt(denom_x[k] * denom_x[l]) * denom_y)
+      }
+    }
+  }
+  Sigma
+}
+
+
+#' Independence covariance for multivariate tau-b (HAC)
+#' @keywords internal
+#' @noRd
+ind_covariance_tau_b_hac <- function(X, Y) {
+  X <- ensure_matrix(X)
+  m <- ncol(X)
+  denom_x <- numeric(m)
+  for (k in seq_len(m)) {
+    denom_x[k] <- tau_b_tie_preamble(X[, k])$denom_ind
+  }
+  denom_y <- tau_b_tie_preamble(Y)$denom_ind
+  sta <- ind_covariance_tau_a_hac(X, Y)
+  Sigma <- matrix(0, nrow = m, ncol = m)
+  for (k in seq_len(m)) {
+    Sigma[k, k] <- ind_variance_tau_a_hac(X[, k], Y) / (denom_x[k] * denom_y)
+  }
+  for (k in seq_len(m)) {
+    for (l in seq_len(m)) {
+      if (k != l) {
+        Sigma[k, l] <- sta[k, l] / (sqrt(denom_x[k] * denom_x[l]) * denom_y)
+      }
+    }
+  }
+  Sigma
+}
+
+
+#' Multivariate Kendall tau-b with covariance matrix
+#'
+#' Point estimates are \code{kendall_tau_b} per column of \code{X}.  Main
+#' covariance is \eqn{J \Sigma_\theta J^\top} with \eqn{\theta = (\tau^{(1)},
+#' s_x^{(1)}, \ldots, \tau^{(m)}, s_x^{(m)}, s_y)} and one shared \eqn{s_y}
+#' column; \eqn{\Sigma_\theta} from stacked influences (IID or HAC).  Same
+#' sqrt-denominator delta method as \code{compute_tau_b_variance()}.
+#'
+#' @param X Numeric matrix \code{n x m}.
+#' @param Y Numeric outcome vector.
+#' @param IID Logical; IID or HAC for \code{Sigma}.
+#' @param version Kernel \code{"v1"} or \code{"v2"}.
+#' @return List with \code{tau_b_vector}, \code{Sigma}, \code{Sigma_ind}.
+#' @keywords internal
+#' @noRd
+compute_tau_b_multivariate_variance <- function(X, Y, IID = TRUE, version = "v2") {
+  X <- ensure_matrix(X)
+  n <- nrow(X)
+  m <- ncol(X)
+
+  K_tau_fn <- if (version == "v1") K_tau_vec_v1 else K_tau_vec_v2
+
+  pre_y <- tau_b_tie_preamble(Y)
+  sy <- pre_y$tau_self
+  ky <- pre_y$k_self
+
+  tau_vec <- numeric(m)
+  sx_vec <- numeric(m)
+  Psi <- matrix(0, nrow = n, ncol = 2 * m + 1)
+
+  for (k in seq_len(m)) {
+    tau_result <- compute_kendall(X[, k], Y)
+    tau_vec[k] <- tau_result$expectation
+    pre_x <- tau_b_tie_preamble(X[, k])
+    sx_vec[k] <- pre_x$tau_self
+    Psi[, 2 * k - 1] <- 2 * K_tau_fn(X[, k], Y, tau_vec[k])
+    Psi[, 2 * k] <- 2 * pre_x$k_self
+  }
+  Psi[, 2 * m + 1] <- 2 * ky
+
+  if (IID) {
+    Sigma_theta <- crossprod(Psi) / n
+  } else {
+    Sigma_theta <- crossprod(Psi) / n + hac_correction_multivariate(Psi)
+  }
+
+  J <- matrix(0, nrow = m, ncol = 2 * m + 1)
+  for (k in seq_len(m)) {
+    g <- tau_b_gradient(tau_vec[k], sx_vec[k], sy)
+    J[k, 2 * (k - 1) + 1] <- g[1]
+    J[k, 2 * k] <- g[2]
+    J[k, 2 * m + 1] <- g[3]
+  }
+
+  Sigma <- J %*% Sigma_theta %*% t(J)
+
+  tau_b_vector <- vapply(seq_len(m), function(k) kendall_tau_b(X[, k], Y), numeric(1))
+
+  if (IID) {
+    Sigma_ind <- ind_covariance_tau_b_iid(X, Y)
+  } else {
+    Sigma_ind <- ind_covariance_tau_b_hac(X, Y)
+  }
+
+  list(tau_b_vector = tau_b_vector, Sigma = Sigma, Sigma_ind = Sigma_ind)
 }
 
 
@@ -350,4 +516,63 @@ compute_gamma_variance <- function(X, Y, IID = TRUE, version = "v2") {
   }
 
   list(gamma = gamma, var = var_est, var_ind = var_ind)
+}
+
+
+#' Multivariate Goodman--Kruskal gamma with covariance matrix
+#'
+#' Same estimand and variance construction as \code{compute_gamma_variance()},
+#' extended to several predictors (stacked influence functions, then IID or HAC
+#' covariance).
+#'
+#' @param X Numeric matrix (n x m).
+#' @param Y Numeric outcome vector.
+#' @param IID Logical; if TRUE use IID variance, otherwise HAC.
+#' @param version Character; "v1" or "v2".
+#' @return List with \code{gamma_vector}, \code{Sigma}, \code{Sigma_ind}.
+#' @keywords internal
+#' @noRd
+compute_gamma_multivariate_variance <- function(X, Y, IID = TRUE, version = "v2") {
+  X <- ensure_matrix(X)
+  N <- length(Y)
+  m <- ncol(X)
+
+  K_tau_fn <- if (version == "v1") K_tau_vec_v1 else K_tau_vec_v2
+
+  gamma_vector <- numeric(m)
+  IC_matrix <- matrix(0, nrow = N, ncol = m)
+  x_tie_probs <- numeric(m)
+
+  y_probs <- as.vector(table(Y)) / N
+  y_tie_prob <- sum(y_probs^2)
+
+  for (k in seq_len(m)) {
+    tau_result <- compute_kendall(X[, k], Y)
+    tau_k <- tau_result$expectation
+    gamma_vector[k] <- goodman_kruskal_gamma(X[, k], Y)
+
+    tie_pre_k <- gamma_tie_preamble(X[, k], Y)
+    x_tie_probs[k] <- tie_pre_k$x_tie_prob
+    gamma_scale_k <- tau_k / (1 - tie_pre_k$tie_prob)
+
+    k_tau_k <- K_tau_fn(X[, k], Y, tau_k)
+    k_nu_k <- tie_pre_k$k_tie
+
+    IC_matrix[, k] <- 2 * (k_tau_k + gamma_scale_k * k_nu_k) /
+      (1 - tie_pre_k$tie_prob)
+  }
+
+  if (IID) {
+    Sigma <- (t(IC_matrix) %*% IC_matrix) / N
+    Sigma_ind_tau <- ind_covariance_tau_a_iid(X, Y)
+  } else {
+    Sigma <- (t(IC_matrix) %*% IC_matrix) / N +
+      hac_correction_multivariate(IC_matrix)
+    Sigma_ind_tau <- ind_covariance_tau_a_hac(X, Y)
+  }
+
+  denom <- (1 - x_tie_probs) * (1 - y_tie_prob)
+  Sigma_ind <- Sigma_ind_tau / (denom %o% denom)
+
+  list(gamma_vector = gamma_vector, Sigma = Sigma, Sigma_ind = Sigma_ind)
 }

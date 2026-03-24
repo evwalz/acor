@@ -92,32 +92,22 @@ test_that("acor.test() rejects invalid conf.level", {
                "conf.level")
 })
 
-test_that("acor.test() rejects multivariate pearson inference", {
+test_that("acor.test() accepts multivariate tau_b inference", {
   X <- cbind(rnorm(20), rnorm(20))
   y <- rnorm(20)
-  expect_error(acor.test(X, y, method = "pearson"),
-               "Multivariate Pearson inference is not yet implemented")
+  res <- acor.test(X, y, method = "tau_b")
+  expect_s3_class(res, "acor_htest")
+  expect_length(res$estimate, 2)
+  expect_true(is.finite(res$statistic))
 })
 
-test_that("acor.test() rejects multivariate rho_b inference", {
+test_that("acor.test() accepts multivariate rho_b inference", {
   X <- cbind(rnorm(20), rnorm(20))
   y <- rnorm(20)
-  expect_error(acor.test(X, y, method = "rho_b"),
-               "Multivariate rho_b inference is not yet implemented")
-})
-
-test_that("acor.test() rejects multivariate tau_b inference", {
-  X <- cbind(rnorm(20), rnorm(20))
-  y <- rnorm(20)
-  expect_error(acor.test(X, y, method = "tau_b"),
-               "Multivariate tau_b inference is not yet implemented")
-})
-
-test_that("acor.test() rejects multivariate gamma inference", {
-  X <- cbind(rnorm(20), rnorm(20))
-  y <- rnorm(20)
-  expect_error(acor.test(X, y, method = "gamma"),
-               "Multivariate gamma inference is not yet implemented")
+  res <- acor.test(X, y, method = "rho_b")
+  expect_s3_class(res, "acor_htest")
+  expect_length(res$estimate, 2)
+  expect_true(is.finite(res$statistic))
 })
 
 test_that("acor.test() rejects HAC inference with fewer than 3 observations", {

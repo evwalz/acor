@@ -551,8 +551,8 @@ test_that("compute_rho_b_variance matches cor() and legacy IID formula", {
   x_eqX <- x_eq(X)
   y_eqY <- y_eq(Y)
   var_rho <- 9 * mean((4 * (g_xX + g_yY + G_XX * G_YY - G_XX - G_YY) + 1 - rho)^2)
-  var_rho_x <- 4 * mean((1 - x_eqX^2 - rho_x)^2)
-  var_rho_y <- 4 * mean((1 - y_eqY^2 - rho_y)^2)
+  var_rho_x <- 9 * mean((1 - x_eqX^2 - rho_x)^2)
+  var_rho_y <- 9 * mean((1 - y_eqY^2 - rho_y)^2)
   var_rhorho_x <- 9 * mean((4 * (g_xX + g_yY + G_XX * G_YY - G_XX - G_YY) + 1 - rho) *
                              (1 - x_eqX^2 - rho_x))
   var_rhorho_y <- 9 * mean((4 * (g_xX + g_yY + G_XX * G_YY - G_XX - G_YY) + 1 - rho) *
@@ -600,6 +600,215 @@ test_that("acor.test works for rho_b single predictor", {
   expect_true(is.finite(result$conf.int[2]))
 })
 
+
+test_that("multivariate rho_b m=1 matches univariate variance", {
+  set.seed(801)
+  n <- 120
+  X <- matrix(sample(1:8, n, replace = TRUE), ncol = 1)
+  Y <- sample(1:6, n, replace = TRUE)
+  uni <- acor:::compute_rho_b_variance(X[, 1], Y, IID = TRUE)
+  multi <- acor:::compute_rho_b_multivariate_variance(X, Y, IID = TRUE)
+  expect_equal(multi$rho_b_vector, uni$rho_b, tolerance = 1e-12)
+  expect_equal(as.numeric(multi$Sigma), uni$var, tolerance = 1e-10)
+  expect_equal(as.numeric(multi$Sigma_ind), uni$var_ind, tolerance = 1e-10)
+})
+
+
+test_that("multivariate rho_b IID diagonal matches univariate per predictor", {
+  set.seed(802)
+  n <- 160
+  X1 <- sample(1:8, n, replace = TRUE)
+  X2 <- sample(1:7, n, replace = TRUE)
+  Y <- sample(1:6, n, replace = TRUE)
+  X_mat <- cbind(X1, X2)
+  res_multi <- acor:::compute_rho_b_multivariate_variance(X_mat, Y, IID = TRUE)
+  res_u1 <- acor:::compute_rho_b_variance(X1, Y, IID = TRUE)
+  res_u2 <- acor:::compute_rho_b_variance(X2, Y, IID = TRUE)
+  expect_equal(diag(res_multi$Sigma)[1], res_u1$var, tolerance = 1e-9)
+  expect_equal(diag(res_multi$Sigma)[2], res_u2$var, tolerance = 1e-9)
+  expect_equal(diag(res_multi$Sigma_ind)[1], res_u1$var_ind, tolerance = 1e-10)
+  expect_equal(diag(res_multi$Sigma_ind)[2], res_u2$var_ind, tolerance = 1e-10)
+})
+
+
+test_that("multivariate rho_b m=1 HAC close to univariate (HAC estimator tol)", {
+  set.seed(803)
+  n <- 100
+  X <- matrix(sample(1:8, n, replace = TRUE), ncol = 1)
+  Y <- sample(1:6, n, replace = TRUE)
+  uni <- acor:::compute_rho_b_variance(X[, 1], Y, IID = FALSE)
+  multi <- acor:::compute_rho_b_multivariate_variance(X, Y, IID = FALSE)
+  expect_equal(multi$rho_b_vector, uni$rho_b, tolerance = 1e-12)
+  expect_equal(as.numeric(multi$Sigma), uni$var, tolerance = 0.003)
+  expect_equal(as.numeric(multi$Sigma_ind), uni$var_ind, tolerance = 1e-9)
+})
+
+
+test_that("multivariate rho_b HAC diagonal close to univariate per predictor (tol)", {
+  set.seed(804)
+  n <- 140
+  X1 <- sample(1:8, n, replace = TRUE)
+  X2 <- sample(1:7, n, replace = TRUE)
+  Y <- sample(1:6, n, replace = TRUE)
+  X_mat <- cbind(X1, X2)
+  res_multi <- acor:::compute_rho_b_multivariate_variance(X_mat, Y, IID = FALSE)
+  res_u1 <- acor:::compute_rho_b_variance(X1, Y, IID = FALSE)
+  res_u2 <- acor:::compute_rho_b_variance(X2, Y, IID = FALSE)
+  expect_equal(diag(res_multi$Sigma)[1], res_u1$var, tolerance = 0.003)
+  expect_equal(diag(res_multi$Sigma)[2], res_u2$var, tolerance = 0.003)
+  expect_equal(diag(res_multi$Sigma_ind)[1], res_u1$var_ind, tolerance = 1e-9)
+  expect_equal(diag(res_multi$Sigma_ind)[2], res_u2$var_ind, tolerance = 1e-9)
+})
+
+
+test_that("acor.test works for rho_b multivariate", {
+  set.seed(805)
+  n <- 200
+  X <- cbind(sample(1:9, n, replace = TRUE), sample(1:7, n, replace = TRUE))
+  Y <- sample(1:6, n, replace = TRUE)
+  result <- acor:::acor.test(X, Y, method = "rho_b")
+  expect_s3_class(result, "acor_htest")
+  expect_length(result$estimate, 2)
+  expect_true(is.numeric(result$p.value))
+  expect_true(result$p.value >= 0 && result$p.value <= 1)
+})
+
+
+test_that("acor.test works for rho_b multivariate HAC", {
+  set.seed(806)
+  n <- 200
+  X <- cbind(sample(1:9, n, replace = TRUE), sample(1:7, n, replace = TRUE))
+  Y <- sample(1:6, n, replace = TRUE)
+  result <- acor:::acor.test(X, Y, method = "rho_b", IID = FALSE)
+  expect_s3_class(result, "acor_htest")
+  expect_length(result$estimate, 2)
+  expect_false(result$IID)
+  expect_equal(dim(result$variance), c(2, 2))
+  expect_true(all(diag(result$variance) > 0))
+})
+
+
+test_that("kendall_tau_b equals tau_xy / sqrt(tau_self_X * tau_self_Y)", {
+  set.seed(700)
+  n <- 90
+  X <- sample(1:7, n, replace = TRUE)
+  Y <- sample(1:5, n, replace = TRUE)
+  tau <- acor:::compute_kendall(X, Y)$expectation
+  sx <- acor:::tau_b_tie_preamble(X)$tau_self
+  sy <- acor:::tau_b_tie_preamble(Y)$tau_self
+  expect_equal(acor:::kendall_tau_b(X, Y), tau / sqrt(sx * sy), tolerance = 1e-12)
+})
+
+
+test_that("compute_tau_b_variance IID matches grad-prime Sigma grad (sqrt tau_b)", {
+  set.seed(701)
+  n <- 120
+  X <- sample(1:6, n, replace = TRUE)
+  Y <- sample(1:5, n, replace = TRUE)
+  tau <- acor:::compute_kendall(X, Y)$expectation
+  pre_x <- acor:::tau_b_tie_preamble(X)
+  pre_y <- acor:::tau_b_tie_preamble(Y)
+  k_tau <- acor:::K_tau_vec_v2(X, Y, tau)
+  grad <- acor:::tau_b_gradient(tau, pre_x$tau_self, pre_y$tau_self)
+  S <- acor:::tau_b_iid_covariance(k_tau, pre_x$k_self, pre_y$k_self)
+  v_manual <- as.numeric(t(grad) %*% S %*% grad)
+  v_pkg <- acor:::compute_tau_b_variance(X, Y, IID = TRUE)$var
+  expect_equal(v_pkg, v_manual, tolerance = 1e-12)
+})
+
+
+test_that("multivariate tau_b m=1 matches univariate variance", {
+  set.seed(702)
+  n <- 100
+  X <- matrix(sample(1:6, n, replace = TRUE), ncol = 1)
+  Y <- sample(1:5, n, replace = TRUE)
+  uni <- acor:::compute_tau_b_variance(X[, 1], Y, IID = TRUE)
+  multi <- acor:::compute_tau_b_multivariate_variance(X, Y, IID = TRUE)
+  expect_equal(multi$tau_b_vector, uni$tau_b, tolerance = 1e-12)
+  expect_equal(as.numeric(multi$Sigma), uni$var, tolerance = 1e-12)
+  expect_equal(as.numeric(multi$Sigma_ind), uni$var_ind, tolerance = 1e-12)
+})
+
+
+test_that("multivariate tau_b IID diagonal matches univariate per predictor", {
+  set.seed(703)
+  n <- 150
+  X1 <- sample(1:6, n, replace = TRUE)
+  X2 <- sample(1:7, n, replace = TRUE)
+  Y <- sample(1:5, n, replace = TRUE)
+  X_mat <- cbind(X1, X2)
+  res_multi <- acor:::compute_tau_b_multivariate_variance(X_mat, Y, IID = TRUE)
+  res_u1 <- acor:::compute_tau_b_variance(X1, Y, IID = TRUE)
+  res_u2 <- acor:::compute_tau_b_variance(X2, Y, IID = TRUE)
+  expect_equal(diag(res_multi$Sigma)[1], res_u1$var, tolerance = 1e-10)
+  expect_equal(diag(res_multi$Sigma)[2], res_u2$var, tolerance = 1e-10)
+  expect_equal(diag(res_multi$Sigma_ind)[1], res_u1$var_ind, tolerance = 1e-10)
+  expect_equal(diag(res_multi$Sigma_ind)[2], res_u2$var_ind, tolerance = 1e-10)
+})
+
+
+test_that("multivariate tau_b m=1 HAC matches univariate (within HAC estimator tol)", {
+  set.seed(705)
+  n <- 100
+  X <- matrix(sample(1:6, n, replace = TRUE), ncol = 1)
+  Y <- sample(1:5, n, replace = TRUE)
+  uni <- acor:::compute_tau_b_variance(X[, 1], Y, IID = FALSE)
+  multi <- acor:::compute_tau_b_multivariate_variance(X, Y, IID = FALSE)
+  expect_equal(multi$tau_b_vector, uni$tau_b, tolerance = 1e-12)
+  # Univariate uses acf/ccf LRV; stacked-Psi HAC uses lag cross-products — same
+  # estimand, small numerical mismatch (see package stress checks ~2e-3 abs).
+  expect_equal(as.numeric(multi$Sigma), uni$var, tolerance = 0.003)
+  expect_equal(as.numeric(multi$Sigma_ind), uni$var_ind, tolerance = 1e-10)
+})
+
+
+test_that("multivariate tau_b HAC diagonal matches univariate per predictor (tol)", {
+  set.seed(706)
+  n <- 150
+  X1 <- sample(1:6, n, replace = TRUE)
+  X2 <- sample(1:7, n, replace = TRUE)
+  Y <- sample(1:5, n, replace = TRUE)
+  X_mat <- cbind(X1, X2)
+  res_multi <- acor:::compute_tau_b_multivariate_variance(X_mat, Y, IID = FALSE)
+  res_u1 <- acor:::compute_tau_b_variance(X1, Y, IID = FALSE)
+  res_u2 <- acor:::compute_tau_b_variance(X2, Y, IID = FALSE)
+  expect_equal(diag(res_multi$Sigma)[1], res_u1$var, tolerance = 0.003)
+  expect_equal(diag(res_multi$Sigma)[2], res_u2$var, tolerance = 0.003)
+  expect_equal(diag(res_multi$Sigma_ind)[1], res_u1$var_ind, tolerance = 1e-10)
+  expect_equal(diag(res_multi$Sigma_ind)[2], res_u2$var_ind, tolerance = 1e-10)
+})
+
+
+test_that("acor.test works for tau_b multivariate", {
+  set.seed(704)
+  n <- 200
+  X <- cbind(sample(1:8, n, replace = TRUE), sample(1:6, n, replace = TRUE))
+  Y <- sample(1:5, n, replace = TRUE)
+  result <- acor:::acor.test(X, Y, method = "tau_b")
+  expect_s3_class(result, "acor_htest")
+  expect_length(result$estimate, 2)
+  expect_true(is.numeric(result$p.value))
+  expect_true(result$p.value >= 0 && result$p.value <= 1)
+})
+
+
+test_that("acor.test works for tau_b multivariate HAC", {
+  set.seed(707)
+  n <- 200
+  X <- cbind(sample(1:8, n, replace = TRUE), sample(1:6, n, replace = TRUE))
+  Y <- sample(1:5, n, replace = TRUE)
+  result <- acor:::acor.test(X, Y, method = "tau_b", IID = FALSE)
+  expect_s3_class(result, "acor_htest")
+  expect_length(result$estimate, 2)
+  expect_false(result$IID)
+  expect_true(is.matrix(result$variance))
+  expect_equal(dim(result$variance), c(2, 2))
+  expect_true(all(diag(result$variance) > 0))
+  expect_true(is.numeric(result$p.value))
+  expect_true(result$p.value >= 0 && result$p.value <= 1)
+})
+
+
 test_that("acor.test works for tau_b single predictor", {
   set.seed(322)
   n <- 250
@@ -616,6 +825,7 @@ test_that("acor.test works for tau_b single predictor", {
   expect_true(is.finite(result$conf.int[2]))
 })
 
+
 test_that("acor.test works for gamma single predictor", {
   set.seed(324)
   n <- 250
@@ -631,6 +841,68 @@ test_that("acor.test works for gamma single predictor", {
   expect_true(is.finite(result$conf.int[1]))
   expect_true(is.finite(result$conf.int[2]))
 })
+
+
+test_that("multivariate gamma IID diagonal matches univariate", {
+  set.seed(510)
+  n <- 200
+  X1 <- sample(1:5, n, replace = TRUE)
+  X2 <- sample(1:8, n, replace = TRUE)
+  Y <- sample(1:4, n, replace = TRUE)
+  X_mat <- cbind(X1, X2)
+
+  res_multi <- acor:::compute_gamma_multivariate_variance(X_mat, Y, IID = TRUE)
+  res_uni1 <- acor:::compute_gamma_variance(X1, Y, IID = TRUE)
+  res_uni2 <- acor:::compute_gamma_variance(X2, Y, IID = TRUE)
+
+  expect_equal(res_multi$gamma_vector[1], res_uni1$gamma, tolerance = 1e-12)
+  expect_equal(res_multi$gamma_vector[2], res_uni2$gamma, tolerance = 1e-12)
+  expect_equal(res_multi$Sigma[1, 1], res_uni1$var, tolerance = 1e-12)
+  expect_equal(res_multi$Sigma[2, 2], res_uni2$var, tolerance = 1e-12)
+  expect_equal(res_multi$Sigma_ind[1, 1], res_uni1$var_ind, tolerance = 1e-12)
+  expect_equal(res_multi$Sigma_ind[2, 2], res_uni2$var_ind, tolerance = 1e-12)
+  expect_equal(res_multi$Sigma[1, 2], res_multi$Sigma[2, 1], tolerance = 1e-14)
+})
+
+
+test_that("multivariate gamma HAC diagonal matches univariate", {
+  set.seed(511)
+  n <- 200
+  X1 <- sample(1:5, n, replace = TRUE)
+  X2 <- sample(1:8, n, replace = TRUE)
+  Y <- sample(1:4, n, replace = TRUE)
+  X_mat <- cbind(X1, X2)
+
+  res_multi <- acor:::compute_gamma_multivariate_variance(X_mat, Y, IID = FALSE)
+  res_uni1 <- acor:::compute_gamma_variance(X1, Y, IID = FALSE)
+  res_uni2 <- acor:::compute_gamma_variance(X2, Y, IID = FALSE)
+
+  expect_equal(res_multi$gamma_vector[1], res_uni1$gamma, tolerance = 1e-12)
+  expect_equal(res_multi$gamma_vector[2], res_uni2$gamma, tolerance = 1e-12)
+  expect_equal(res_multi$Sigma[1, 1], res_uni1$var, tolerance = 1e-4)
+  expect_equal(res_multi$Sigma[2, 2], res_uni2$var, tolerance = 1e-4)
+})
+
+
+test_that("acor.test works for multivariate gamma IID", {
+  set.seed(512)
+  n <- 200
+  X1 <- sample(1:5, n, replace = TRUE)
+  X2 <- sample(1:8, n, replace = TRUE)
+  X3 <- sample(1:3, n, replace = TRUE)
+  Y <- sample(1:4, n, replace = TRUE)
+  X_mat <- cbind(X1, X2, X3)
+
+  result <- acor.test(X_mat, Y, method = "gamma", IID = TRUE)
+
+  expect_length(result$estimate, 3)
+  expect_equal(nrow(result$pairwise_results), 3)
+  expect_true(all(is.finite(result$p.value_ind)))
+  expect_true(is.matrix(result$variance))
+  expect_equal(dim(result$variance), c(3, 3))
+  expect_true(all(diag(result$variance) > 0))
+})
+
 
 test_that("tau-a IID variance matches brute force (no ties)", {
   set.seed(42)
