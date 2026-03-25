@@ -133,9 +133,10 @@ print.acor <- function(x, ...) {
 #'   * `"delta"` (default): delta-method / kernel-based variance
 #'   * `"ij"`: infinitesimal jackknife variance
 #'
-#'   The `"ij"` option is currently supported only for `"akc"`, `"agc"`,
-#'   `"cid"`, and `"cma"`. When `IID = FALSE`, the Bartlett-kernel HAC
-#'   estimator is applied to the IJ influence function values.
+#'   The `"ij"` option is supported for `"akc"`, `"agc"`, `"cid"`,
+#'   `"cma"`, `"tau_b"`, `"gamma"`, and `"rho_b"`. When `IID = FALSE`,
+#'   the Bartlett-kernel HAC estimator is applied to the IJ influence
+#'   function values.
 #'   The independence variance uses the same closed-form formula regardless
 #'   of the variance method.
 #' 
@@ -199,6 +200,9 @@ print.acor <- function(x, ...) {
 #' # Infinitesimal jackknife variance for AKC
 #' test_ij <- acor.test(x, y, method = "akc", variance = "ij")
 #'
+#' # IJ is also available for tau_b, gamma, and rho_b
+#' acor.test(x, y, method = "tau_b", variance = "ij")
+#'
 #' # Compare multiple predictors
 #' x1 <- rnorm(100)
 #' x2 <- rnorm(100)
@@ -236,7 +240,7 @@ acor.test <- function(X, Y,
   }
   
   if (variance_method == "ij") {
-    ij_methods <- c("akc", "agc", "cid", "cma")
+    ij_methods <- c("akc", "agc", "cid", "cma", "tau_b", "gamma", "rho_b")
     if (!(method %in% ij_methods)) {
       stop("variance = \"ij\" is only supported for methods: ",
            paste(ij_methods, collapse = ", "))
@@ -341,31 +345,91 @@ acor.test <- function(X, Y,
       variance_ind <- result$Sigma_ind
     } 
   } else if (method == "tau_b") {
-    version <- select_kernel_version(Y, X)
-
-    if (m == 1) {
-      result <- compute_tau_b_variance(X[, 1], Y, IID = IID, version = version)
-      estimates <- result$tau_b
-      variance <- result$var
-      variance_ind <- result$var_ind
+    if (variance_method == "ij") {
+      if (m == 1) {
+        result <- tau_b_ij_cpp(X[, 1], Y)
+        estimates <- result$tau_b
+        ic <- result$ic
+        variance_ind <- ind_variance_tau_b_univariate(X[, 1], Y, IID = IID)
+        if (IID) {
+          variance <- result$var_ij
+        } else {
+          variance <- hac_variance_univariate(ic, scale_factor = 1)
+        }
+      } else {
+        IC_mat <- matrix(0, nrow = n, ncol = m)
+        estimates <- numeric(m)
+        for (k in seq_len(m)) {
+          res_k <- tau_b_ij_cpp(X[, k], Y)
+          estimates[k] <- res_k$tau_b
+          IC_mat[, k] <- res_k$ic
+        }
+        if (IID) {
+          variance <- crossprod(IC_mat) / n
+          variance_ind <- ind_covariance_tau_b_iid(X, Y)
+        } else {
+          variance <- hac_covariance_multivariate(IC_mat, scale_factor = 1)
+          variance_ind <- ind_covariance_tau_b_hac(X, Y)
+        }
+      }
     } else {
-      result <- compute_tau_b_multivariate_variance(X, Y, IID = IID, version = version)
-      estimates <- result$tau_b_vector
-      variance <- result$Sigma
-      variance_ind <- result$Sigma_ind
+      version <- select_kernel_version(Y, X)
+      if (m == 1) {
+        result <- compute_tau_b_variance(X[, 1], Y, IID = IID, version = version)
+        estimates <- result$tau_b
+        variance <- result$var
+        variance_ind <- result$var_ind
+      } else {
+        result <- compute_tau_b_multivariate_variance(X, Y, IID = IID, version = version)
+        estimates <- result$tau_b_vector
+        variance <- result$Sigma
+        variance_ind <- result$Sigma_ind
+      }
     }
   } else if (method == "gamma") {
-    version <- select_kernel_version(Y, X)
-    if (m == 1) {
-      result <- compute_gamma_variance(X[, 1], Y, IID = IID, version = version)
-      estimates <- result$gamma
-      variance <- result$var
-      variance_ind <- result$var_ind
+    if (variance_method == "ij") {
+      if (m == 1) {
+        result <- gamma_ij_cpp(X[, 1], Y)
+        estimates <- result$gamma
+        ic <- result$ic
+        variance_ind <- ind_variance_gamma_univariate(X[, 1], Y, IID = IID)
+        if (IID) {
+          variance <- result$var_ij
+        } else {
+          variance <- hac_variance_univariate(ic, scale_factor = 1)
+        }
+      } else {
+        IC_mat <- matrix(0, nrow = n, ncol = m)
+        estimates <- numeric(m)
+        for (k in seq_len(m)) {
+          res_k <- gamma_ij_cpp(X[, k], Y)
+          estimates[k] <- res_k$gamma
+          IC_mat[, k] <- res_k$ic
+        }
+        if (IID) {
+          variance <- crossprod(IC_mat) / n
+        } else {
+          variance <- hac_covariance_multivariate(IC_mat, scale_factor = 1)
+        }
+        variance_ind <- if (IID) {
+          ind_covariance_gamma_iid(X, Y)
+        } else {
+          ind_covariance_gamma_hac(X, Y)
+        }
+      }
     } else {
-      result <- compute_gamma_multivariate_variance(X, Y, IID = IID, version = version)
-      estimates <- result$gamma_vector
-      variance <- result$Sigma
-      variance_ind <- result$Sigma_ind
+      version <- select_kernel_version(Y, X)
+      if (m == 1) {
+        result <- compute_gamma_variance(X[, 1], Y, IID = IID, version = version)
+        estimates <- result$gamma
+        variance <- result$var
+        variance_ind <- result$var_ind
+      } else {
+        result <- compute_gamma_multivariate_variance(X, Y, IID = IID, version = version)
+        estimates <- result$gamma_vector
+        variance <- result$Sigma
+        variance_ind <- result$Sigma_ind
+      }
     }
   } else if (method == "rho_a") {
     
@@ -382,8 +446,38 @@ acor.test <- function(X, Y,
     }
     
   } else if (method == "rho_b") {
-    
-    if (m == 1) {
+    if (variance_method == "ij") {
+      if (m == 1) {
+        result <- rho_b_ij_cpp(X[, 1], Y)
+        estimates <- result$rho_b
+        ic <- result$ic
+        variance_ind <- if (IID) {
+          ind_variance_rho_b_iid()
+        } else {
+          ind_variance_rho_b_hac(X[, 1], Y)
+        }
+        if (IID) {
+          variance <- result$var_ij
+        } else {
+          variance <- hac_variance_univariate(ic, scale_factor = 1)
+        }
+      } else {
+        IC_mat <- matrix(0, nrow = n, ncol = m)
+        estimates <- numeric(m)
+        for (k in seq_len(m)) {
+          res_k <- rho_b_ij_cpp(X[, k], Y)
+          estimates[k] <- res_k$rho_b
+          IC_mat[, k] <- res_k$ic
+        }
+        if (IID) {
+          variance <- crossprod(IC_mat) / n
+          variance_ind <- ind_covariance_rho_b_iid(X, Y)
+        } else {
+          variance <- hac_covariance_multivariate(IC_mat, scale_factor = 1)
+          variance_ind <- ind_covariance_rho_b_hac(X, Y)
+        }
+      }
+    } else if (m == 1) {
       result <- compute_rho_b_variance(X[, 1], Y, IID = IID)
       estimates <- result$rho_b
       variance <- result$var
@@ -394,7 +488,6 @@ acor.test <- function(X, Y,
       variance <- result$Sigma
       variance_ind <- result$Sigma_ind
     }
-    
   } else if (method == "pearson") {
     
     if (m == 1) {

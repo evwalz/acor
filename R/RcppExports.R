@@ -41,3 +41,15 @@ akc_ij_variance_cpp <- function(X, Y) {
     .Call(`_acor_akc_ij_variance_cpp`, X, Y)
 }
 
+rho_b_ij_cpp <- function(X, Y) {
+    .Call(`_acor_rho_b_ij_cpp`, X, Y)
+}
+
+tau_b_ij_cpp <- function(X, Y) {
+    .Call(`_acor_tau_b_ij_cpp`, X, Y)
+}
+
+gamma_ij_cpp <- function(X, Y) {
+    .Call(`_acor_gamma_ij_cpp`, X, Y)
+}
+

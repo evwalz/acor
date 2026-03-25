@@ -465,7 +465,7 @@ test_that("acor.test() with IID = FALSE works for m >= 2 (CMA)", {
 test_that("acor.test() rejects variance='ij' for unsupported methods", {
   set.seed(1234)
   x <- rnorm(50); y <- rnorm(50)
-  for (m in c("tau_a", "tau_b", "rho_a", "rho_b", "gamma", "pearson")) {
+  for (m in c("tau_a", "rho_a", "pearson")) {
     expect_error(acor.test(x, y, method = m, variance = "ij"),
                  "only supported for methods")
   }
@@ -648,4 +648,39 @@ test_that("IJ and delta give identical independence variance for AGC", {
   res_ij    <- acor.test(x, y, method = "agc", variance = "ij")
   
   expect_equal(res_ij$variance_ind, res_delta$variance_ind, tolerance = 1e-12)
+})
+
+# IJ for tau_b / gamma / rho_b: match delta point estimates and closed-form
+# independence variance (IJ path uses ind_* helpers only, not compute_*_variance).
+
+test_that("IJ and delta give same point estimate for tau_b, gamma, rho_b", {
+  set.seed(2010)
+  x <- rnorm(200); y <- x + rnorm(200)
+  for (m in c("tau_b", "gamma", "rho_b")) {
+    res_d <- acor.test(x, y, method = m, variance = "delta")
+    res_i <- acor.test(x, y, method = m, variance = "ij")
+    expect_equal(unname(res_i$estimate), unname(res_d$estimate), tolerance = 1e-10)
+  }
+})
+
+test_that("IJ and delta give identical independence variance for tau_b, gamma, rho_b", {
+  set.seed(2011)
+  x <- rnorm(200); y <- rnorm(200)
+  for (m in c("tau_b", "gamma", "rho_b")) {
+    res_d <- acor.test(x, y, method = m, variance = "delta")
+    res_i <- acor.test(x, y, method = m, variance = "ij")
+    expect_equal(res_i$variance_ind, res_d$variance_ind, tolerance = 1e-12)
+  }
+})
+
+test_that("acor.test variance='ij' IID=FALSE runs for tau_b, gamma, rho_b", {
+  set.seed(2012)
+  x <- rnorm(200); y <- x + rnorm(200)
+  for (m in c("tau_b", "gamma", "rho_b")) {
+    res <- acor.test(x, y, method = m, variance = "ij", IID = FALSE)
+    expect_s3_class(res, "acor_htest")
+    expect_true(is.finite(res$statistic))
+    expect_true(res$variance > 0)
+    expect_true(res$variance_ind > 0)
+  }
 })

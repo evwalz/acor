@@ -48,9 +48,10 @@ assumptions and a HAC variance estimator is used.}
 \item \code{"ij"}: infinitesimal jackknife variance
 }
 
-The \code{"ij"} option is currently supported only for \code{"akc"}, \code{"agc"},
-\code{"cid"}, and \code{"cma"}. When \code{IID = FALSE}, the Bartlett-kernel HAC
-estimator is applied to the IJ influence function values.
+The \code{"ij"} option is supported for \code{"akc"}, \code{"agc"}, \code{"cid"},
+\code{"cma"}, \code{"tau_b"}, \code{"gamma"}, and \code{"rho_b"}. When \code{IID = FALSE},
+the Bartlett-kernel HAC estimator is applied to the IJ influence
+function values.
 The independence variance uses the same closed-form formula regardless
 of the variance method.}
 }
@@ -118,6 +119,9 @@ test_result <- acor.test(x, y, method = "gamma")
 
 # Infinitesimal jackknife variance for AKC
 test_ij <- acor.test(x, y, method = "akc", variance = "ij")
+
+# IJ is also available for tau_b, gamma, and rho_b
+acor.test(x, y, method = "tau_b", variance = "ij")
 
 # Compare multiple predictors
 x1 <- rnorm(100)

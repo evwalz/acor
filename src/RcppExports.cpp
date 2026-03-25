@@ -131,6 +131,42 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// rho_b_ij_cpp
+List rho_b_ij_cpp(NumericVector X, NumericVector Y);
+RcppExport SEXP _acor_rho_b_ij_cpp(SEXP XSEXP, SEXP YSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type X(XSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type Y(YSEXP);
+    rcpp_result_gen = Rcpp::wrap(rho_b_ij_cpp(X, Y));
+    return rcpp_result_gen;
+END_RCPP
+}
+// tau_b_ij_cpp
+List tau_b_ij_cpp(NumericVector X, NumericVector Y);
+RcppExport SEXP _acor_tau_b_ij_cpp(SEXP XSEXP, SEXP YSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type X(XSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type Y(YSEXP);
+    rcpp_result_gen = Rcpp::wrap(tau_b_ij_cpp(X, Y));
+    return rcpp_result_gen;
+END_RCPP
+}
+// gamma_ij_cpp
+List gamma_ij_cpp(NumericVector X, NumericVector Y);
+RcppExport SEXP _acor_gamma_ij_cpp(SEXP XSEXP, SEXP YSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type X(XSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type Y(YSEXP);
+    rcpp_result_gen = Rcpp::wrap(gamma_ij_cpp(X, Y));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_acor_kendall_tau_sign_cpp", (DL_FUNC) &_acor_kendall_tau_sign_cpp, 2},
@@ -143,6 +179,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_acor_agc_ij_variance_cpp", (DL_FUNC) &_acor_agc_ij_variance_cpp, 2},
     {"_acor_akc_ij_cpp", (DL_FUNC) &_acor_akc_ij_cpp, 2},
     {"_acor_akc_ij_variance_cpp", (DL_FUNC) &_acor_akc_ij_variance_cpp, 2},
+    {"_acor_rho_b_ij_cpp", (DL_FUNC) &_acor_rho_b_ij_cpp, 2},
+    {"_acor_tau_b_ij_cpp", (DL_FUNC) &_acor_tau_b_ij_cpp, 2},
+    {"_acor_gamma_ij_cpp", (DL_FUNC) &_acor_gamma_ij_cpp, 2},
     {NULL, NULL, 0}
 };
 
