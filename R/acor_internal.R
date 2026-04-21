@@ -47,6 +47,53 @@ validate_acor_inputs <- function(X, Y, min_n = 2L) {
 
 
 # ============================================================================
+# Optional almost-equal tie collapse on numeric Y (aeq-style)
+# ============================================================================
+
+#' Collapse nearly-equal numeric \code{Y} values using an aeq-style rule:
+#' sort unique finite values, merge adjacent values whose gap is within
+#' \code{tolerance} (absolute or relative to \code{mean(abs(y))}), then map
+#' each observation to the left endpoint of its merged block (same pattern as
+#' common implementations of an aeq-time fix for numeric outcomes).
+#'
+#' @param Y Numeric vector.
+#' @param tolerance Default \code{sqrt(.Machine$double.eps)}.
+#' @return Numeric vector of the same length as \code{Y}.
+#' @keywords internal
+#' @noRd
+bucket_y_aeq_style <- function(Y, tolerance = sqrt(.Machine$double.eps)) {
+  Y <- as.numeric(Y)
+  if (!is.finite(tolerance) || tolerance <= 0) {
+    return(Y)
+  }
+  fin <- is.finite(Y)
+  if (!any(fin)) {
+    return(Y)
+  }
+  yu <- sort(unique(Y[fin]))
+  if (length(yu) <= 1L) {
+    return(Y)
+  }
+  dy <- diff(yu)
+  maby <- mean(abs(yu))
+  if (!is.finite(maby) || maby == 0) {
+    tied <- dy <= tolerance
+  } else {
+    tied <- (dy <= tolerance) | (dy / maby <= tolerance)
+  }
+  cuts <- yu[c(TRUE, !tied)]
+  if (length(cuts) == length(yu)) {
+    return(Y)
+  }
+  out <- Y
+  ii <- which(fin)
+  zi <- findInterval(Y[ii], cuts)
+  out[ii] <- cuts[zi]
+  out
+}
+
+
+# ============================================================================
 # KERNEL VERSION SELECTION
 # ============================================================================
 
@@ -73,7 +120,7 @@ select_kernel_version <- function(Y, X) {
 # ============================================================================
 
 #' Compute univariate AKC with variance using specified kernel version
-#' 
+#'
 #' @param X Numeric predictor vector
 #' @param Y Numeric outcome vector
 #' @param IID Logical; if TRUE uses IID variance, if FALSE uses HAC

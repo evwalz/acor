@@ -8,7 +8,8 @@ acor(
   X,
   Y,
   method = c("pearson", "akc", "agc", "cid", "cma", "tau_a", "tau_b", "gamma", "rho_a",
-    "rho_b")
+    "rho_b"),
+  aeq_y = FALSE
 )
 }
 \arguments{
@@ -23,6 +24,10 @@ numeric matrix with one predictor per column.}
 "gamma",
 "rho_a", "rho_b",
 "pearson"}
+
+\item{aeq_y}{Logical; if \code{TRUE}, collapse nearly-equal numeric \code{Y}
+with an aeq-style rule before computing estimates (see
+\code{\link{acor.test}}). Default \code{FALSE}.}
 }
 \value{
 An object of class \code{"acor"} with components:

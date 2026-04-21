@@ -47,6 +47,10 @@
 #' 
 #' For multiple predictors, `X` should be a matrix with predictors in columns.
 #' The returned `estimate` vector follows the column order of `X`.
+#'
+#' @param aeq_y Logical; if \code{TRUE}, collapse nearly-equal numeric \code{Y}
+#'   with an aeq-style rule before computing estimates (see
+#'   \code{\link{acor.test}}). Default \code{FALSE}.
 #' @examples
 #' # Single predictor
 #' x <- rnorm(100)
@@ -64,13 +68,30 @@ acor <- function(X, Y, method = c("pearson", "akc", "agc", "cid", "cma",
                                   "tau_a", "tau_b",
                                   "gamma",
                                   "rho_a", "rho_b"
-                                  )) {
+                                  ),
+                 aeq_y = FALSE) {
   method <- match.arg(method)
   
   validated <- validate_acor_inputs(X, Y)
   X <- validated$X
-  Y <- validated$Y
+  Y_orig <- validated$Y
   m <- validated$m
+
+  Y <- Y_orig
+  if (isTRUE(aeq_y)) {
+    tol <- getOption("acor.aeq_y_tolerance", NULL)
+    if (is.null(tol)) {
+      tol <- sqrt(.Machine$double.eps)
+    }
+    if (!is.numeric(tol) || length(tol) != 1L || !is.finite(tol) || tol <= 0) {
+      stop("Option 'acor.aeq_y_tolerance' must be NULL or one positive finite number")
+    }
+    Y <- bucket_y_aeq_style(Y_orig, tol)
+    if (length(unique(Y)) < 2L) {
+      stop("After aeq-style Y collapsing, Y has fewer than 2 distinct values; ",
+           "use aeq_y = FALSE or a smaller tolerance via options(acor.aeq_y_tolerance = )")
+    }
+  }
   # Pre-compute Y ranks once for methods that need them
   y_ranks <- NULL
   rank_methods <- c("agc", "cma", "rho_a", "rho_b")
@@ -139,6 +160,12 @@ print.acor <- function(x, ...) {
 #'   function values.
 #'   The independence variance uses the same closed-form formula regardless
 #'   of the variance method.
+#' @param aeq_y Logical; if \code{TRUE}, collapse nearly-equal numeric \code{Y}
+#'   with an aeq-style rule before all computations (default tolerance
+#'   \code{sqrt(.Machine$double.eps)}), overridable by
+#'   \code{options(acor.aeq_y_tolerance = )}. Kernel version (\code{v1} vs
+#'   \code{v2}) still uses the original \code{Y} before collapsing. Default
+#'   \code{FALSE}.
 #' 
 #' @return An object of class `"acor_htest"`. For a single predictor, the
 #'   result also inherits from `"htest"` and contains the estimate, its
@@ -175,6 +202,12 @@ print.acor <- function(x, ...) {
 #' Independence null values:
 #' - AKC, AGC: H0: correlation = 0
 #' - CID, CMA: H0: correlation = 0.5
+#'
+#' If \code{aeq_y = TRUE}, \code{Y} is replaced by an aeq-style collapse of
+#' nearly-equal values (tolerance default \code{sqrt(.Machine$double.eps)},
+#' settable via \code{options(acor.aeq_y_tolerance = )}) before any method’s
+#' computations; \code{select_kernel_version()} still uses the original
+#' \code{Y}. Default \code{aeq_y = FALSE} uses \code{Y} as validated.
 #' 
 #' @examples
 #' # Test if AKC differs from 0 (independence test)
@@ -218,8 +251,8 @@ acor.test <- function(X, Y,
                       conf.level = 0.95,
                       fisher = FALSE, 
                       IID = TRUE,
-                      variance = c("delta", "ij")
-) {
+                      variance = c("delta", "ij"),
+                      aeq_y = FALSE) {
   
   dname <- paste(deparse(substitute(X)), "and", deparse(substitute(Y)))
   method <- match.arg(method)
@@ -232,11 +265,27 @@ acor.test <- function(X, Y,
 
   validated <- validate_acor_inputs(X, Y)
   X <- validated$X
-  Y <- validated$Y
+  Y_orig <- validated$Y
   n <- validated$n
   m <- validated$m
   if (n < 3) {
     stop("At least 3 observations are required")
+  }
+
+  Y <- Y_orig
+  if (isTRUE(aeq_y)) {
+    tol <- getOption("acor.aeq_y_tolerance", NULL)
+    if (is.null(tol)) {
+      tol <- sqrt(.Machine$double.eps)
+    }
+    if (!is.numeric(tol) || length(tol) != 1L || !is.finite(tol) || tol <= 0) {
+      stop("Option 'acor.aeq_y_tolerance' must be NULL or one positive finite number")
+    }
+    Y <- bucket_y_aeq_style(Y_orig, tol)
+    if (length(unique(Y)) < 2L) {
+      stop("After aeq-style Y collapsing, Y has fewer than 2 distinct values; ",
+           "use aeq_y = FALSE or a smaller tolerance via options(acor.aeq_y_tolerance = )")
+    }
   }
   
   if (variance_method == "ij") {
@@ -274,7 +323,6 @@ acor.test <- function(X, Y,
   # Compute correlation(s) - this already handles variance correctly
   # Compute estimates and variance based on method
   if (method %in% c("akc", "cid")) {
-    
     if (variance_method == "ij") {
       p_Y <- compute_tau_Y(Y)$p_tie_y
       
@@ -307,13 +355,13 @@ acor.test <- function(X, Y,
       }
     } else {
       if (m == 1) {
-        version <- select_kernel_version(Y, X)
+        version <- select_kernel_version(Y_orig, X)
         result <- compute_akc_variance_auto(X[, 1], Y, IID = IID, version = version)
         akc_vals <- result$akc
         Sigma_akc <- result$var
         Sigma_akc_ind <- result$var_ind
       } else {
-        version <- select_kernel_version(Y, X)
+        version <- select_kernel_version(Y_orig, X)
         result <- compute_akc_multivariate_variance_auto(X, Y, IID = IID, version = version)
         akc_vals <- result$akc_vector
         Sigma_akc <- result$Sigma
@@ -331,7 +379,7 @@ acor.test <- function(X, Y,
       variance_ind <- Sigma_akc_ind
     }
   } else if (method == "tau_a") {
-    version <- select_kernel_version(Y, X)
+    version <- select_kernel_version(Y_orig, X)
     
     if (m == 1) {
       result <- compute_tau_a_variance(X[, 1], Y, IID = IID, version = version)
@@ -373,7 +421,7 @@ acor.test <- function(X, Y,
         }
       }
     } else {
-      version <- select_kernel_version(Y, X)
+      version <- select_kernel_version(Y_orig, X)
       if (m == 1) {
         result <- compute_tau_b_variance(X[, 1], Y, IID = IID, version = version)
         estimates <- result$tau_b
@@ -418,7 +466,7 @@ acor.test <- function(X, Y,
         }
       }
     } else {
-      version <- select_kernel_version(Y, X)
+      version <- select_kernel_version(Y_orig, X)
       if (m == 1) {
         result <- compute_gamma_variance(X[, 1], Y, IID = IID, version = version)
         estimates <- result$gamma

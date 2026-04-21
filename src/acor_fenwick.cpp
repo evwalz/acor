@@ -230,6 +230,11 @@ double pair_tie_proportion(NumericVector V) {
   return n_tied_pairs / ((double)n * (n - 1));
 }
 
+// [[Rcpp::export]]
+double pair_tie_proportion_cpp(NumericVector V) {
+  return pair_tie_proportion(V);
+}
+
 
 // ============================================================================
 // kendall_tau_sign_cpp

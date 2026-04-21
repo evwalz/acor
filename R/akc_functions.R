@@ -344,17 +344,19 @@ kendall_tau_sign_binary <- function(X, Y) {
 # ============================================================================
 
 #' General tau_Y computation for non-binary Y
+#'
+#' Uses \code{pair_tie_proportion_cpp()} so tie grouping matches
+#' \code{kendall_tau_sign_cpp()} / concordance code (bitwise double equality
+#' in \code{std::map}), not \code{table(Y)} (which can merge near-equal
+#' floats). Then \code{expectation = 1 - p_tie_y} as before.
+#'
 #' @param Y Numeric outcome vector.
 #' @return List with \code{expectation} and \code{p_tie_y}.
 #' @keywords internal
 #' @noRd
 tau_Y_func <- function(Y) {
-  n <- length(Y)
-  num_pairs <- n * (n - 1) / 2
-  freq <- as.numeric(table(Y))
-  n_ties_y <- sum(freq * (freq - 1) / 2)
-  p_tie_y <- n_ties_y / num_pairs
-  expectation <- (num_pairs - n_ties_y) / num_pairs
+  p_tie_y <- pair_tie_proportion_cpp(as.numeric(Y))
+  expectation <- 1 - p_tie_y
   list(expectation = expectation, p_tie_y = p_tie_y)
 }
 

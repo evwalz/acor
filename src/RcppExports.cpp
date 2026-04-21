@@ -10,6 +10,17 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// pair_tie_proportion_cpp
+double pair_tie_proportion_cpp(NumericVector V);
+RcppExport SEXP _acor_pair_tie_proportion_cpp(SEXP VSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type V(VSEXP);
+    rcpp_result_gen = Rcpp::wrap(pair_tie_proportion_cpp(V));
+    return rcpp_result_gen;
+END_RCPP
+}
 // kendall_tau_sign_cpp
 List kendall_tau_sign_cpp(NumericVector X, NumericVector Y);
 RcppExport SEXP _acor_kendall_tau_sign_cpp(SEXP XSEXP, SEXP YSEXP) {
@@ -169,6 +180,7 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_acor_pair_tie_proportion_cpp", (DL_FUNC) &_acor_pair_tie_proportion_cpp, 1},
     {"_acor_kendall_tau_sign_cpp", (DL_FUNC) &_acor_kendall_tau_sign_cpp, 2},
     {"_acor_kendall_tau_a", (DL_FUNC) &_acor_kendall_tau_a, 2},
     {"_acor_kendall_tau_b", (DL_FUNC) &_acor_kendall_tau_b, 2},

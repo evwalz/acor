@@ -277,3 +277,27 @@ test_that("Sigma_akc_multivariate_ts_v1 and _ts_v2 produce identical results to 
                  info = sprintf("%s: Sigma v2 should match original", tc$name))
   }
 })
+
+# tau_Y_func uses pair_tie_proportion_cpp so Y ties match kendall_tau_sign_cpp.
+
+test_that("tau_Y_func p_tie_y matches pair_tie_proportion_cpp (Kendall-consistent)", {
+  set.seed(4001)
+  for (i in 1:25) {
+    Y <- rnorm(80 + i)
+    ty <- acor:::tau_Y_func(Y)
+    p_cpp <- pair_tie_proportion_cpp(as.numeric(Y))
+    expect_equal(ty$p_tie_y, p_cpp, tolerance = 1e-15)
+    expect_equal(ty$expectation, 1 - p_cpp, tolerance = 1e-15)
+  }
+})
+
+test_that("tau_Y_func matches table(Y) for exact-duplicate numeric Y", {
+  Y <- rep(c(0, 1.5, pi), c(4, 10, 6))
+  n <- length(Y)
+  np <- n * (n - 1) / 2
+  f <- as.numeric(table(Y))
+  p_tab <- sum(f * (f - 1) / 2) / np
+  ty <- acor:::tau_Y_func(Y)
+  expect_equal(ty$p_tie_y, p_tab, tolerance = 1e-15)
+  expect_equal(ty$p_tie_y, pair_tie_proportion_cpp(as.numeric(Y)), tolerance = 1e-15)
+})

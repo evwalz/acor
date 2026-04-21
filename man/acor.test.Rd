@@ -13,7 +13,8 @@ acor.test(
   conf.level = 0.95,
   fisher = FALSE,
   IID = TRUE,
-  variance = c("delta", "ij")
+  variance = c("delta", "ij"),
+  aeq_y = FALSE
 )
 }
 \arguments{
@@ -54,6 +55,13 @@ the Bartlett-kernel HAC estimator is applied to the IJ influence
 function values.
 The independence variance uses the same closed-form formula regardless
 of the variance method.}
+
+\item{aeq_y}{Logical; if \code{TRUE}, collapse nearly-equal numeric \code{Y}
+with an aeq-style rule before all computations (default tolerance
+\code{sqrt(.Machine$double.eps)}), overridable by
+\code{options(acor.aeq_y_tolerance = )}. Kernel version (\code{v1} vs
+\code{v2}) still uses the original \code{Y} before collapsing. Default
+\code{FALSE}.}
 }
 \value{
 An object of class \code{"acor_htest"}. For a single predictor, the
@@ -95,6 +103,12 @@ Independence null values:
 \item AKC, AGC: H0: correlation = 0
 \item CID, CMA: H0: correlation = 0.5
 }
+
+If \code{aeq_y = TRUE}, \code{Y} is replaced by an aeq-style collapse of
+nearly-equal values (tolerance default \code{sqrt(.Machine$double.eps)},
+settable via \code{options(acor.aeq_y_tolerance = )}) before any method’s
+computations; \code{select_kernel_version()} still uses the original
+\code{Y}. Default \code{aeq_y = FALSE} uses \code{Y} as validated.
 }
 \examples{
 # Test if AKC differs from 0 (independence test)
