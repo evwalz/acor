@@ -25,9 +25,11 @@ numeric matrix with one predictor per column.}
 "rho_a", "rho_b",
 "pearson"}
 
-\item{aeq_y}{Logical; if \code{TRUE}, collapse nearly-equal numeric \code{Y}
-with an aeq-style rule before computing estimates (see
-\code{\link{acor.test}}). Default \code{FALSE}.}
+\item{aeq_y}{Logical. If \code{TRUE}, merge nearly-equal \code{Y} before
+computation (default tolerance \code{sqrt(.Machine$double.eps)}), aligned
+with \code{survival::concordance()}; if \code{FALSE}, exact equality on
+stored values. Override tolerance with \code{options(acor.aeq_y_tolerance = )}.
+See Details.}
 }
 \value{
 An object of class \code{"acor"} with components:
@@ -74,6 +76,16 @@ All other measures range from -1 to 1 (with 0 = independence).
 
 For multiple predictors, \code{X} should be a matrix with predictors in columns.
 The returned \code{estimate} vector follows the column order of \code{X}.
+
+\subsection{Handling floating-point ties in Y}{
+With \code{aeq_y = FALSE} (default), two \code{Y} values count as equal only
+if they are exactly equal as stored \code{double}s (R does not merge values
+that differ only by tiny rounding error). With \code{aeq_y = TRUE}, nearly-equal \code{Y} are merged
+before computation (default tolerance \code{sqrt(.Machine$double.eps)}),
+aligned with the floating-point tie fix in \code{survival::concordance()};
+override via \code{options(acor.aeq_y_tolerance = )}. Only \code{Y} is
+adjusted, not \code{X}.
+}
 }
 \examples{
 # Single predictor
