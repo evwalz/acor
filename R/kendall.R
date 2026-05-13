@@ -180,6 +180,15 @@ compute_tau_a_multivariate_variance <- function(X, Y, IID = TRUE, version = "v2"
 # ============================================================================
 
 #' tau_b tie-normalization preamble
+#'
+#' Returns both the U-statistic self-correlation \code{tau_self =
+#' (N/(N-1))(1 - sum p^2)} (used to define the point estimate
+#' \code{kendall_tau_b}) and the plug-in version \code{denom_ind = 1 - sum p^2}.
+#' The IF projection \code{k_self = tie_prob2 - prob_y(V)} is centred at the
+#' plug-in mean \code{denom_ind} so that it pairs correctly with the
+#' delta-method gradient evaluated at \code{denom_ind} (package convention:
+#' coefficient uses U-stat, variance uses plug-in).
+#'
 #' @keywords internal
 #' @noRd
 tau_b_tie_preamble <- function(V) {
@@ -189,7 +198,8 @@ tau_b_tie_preamble <- function(V) {
   tie_prob3 <- sum(probs^3)
   tau_self <- (N / (N - 1)) * (1 - tie_prob2)
   denom_ind <- 1 - tie_prob2
-  k_self <- 1 - prob_y(V) - tau_self
+  # IF projection centred at the plug-in tie mass (E[k_self] = 0 under plug-in).
+  k_self <- tie_prob2 - prob_y(V)
 
   list(
     tau_self = tau_self,
@@ -289,9 +299,11 @@ ind_variance_tau_b_univariate <- function(X, Y, IID = TRUE) {
 
 #' Compute tau_b with variance
 #'
-#' Point estimate is \code{kendall_tau_b} = \eqn{\tau(X,Y)/\sqrt{s_x s_y}} with
-#' \code{sx, sy = tau_self} from \code{tau_b_tie_preamble}.  Main variance uses
-#' the delta method for that ratio (same structure as \code{rho_b}).
+#' Point estimate is \code{kendall_tau_b = tau / sqrt(tau_self_X * tau_self_Y)}
+#' (U-statistic tie proportions in the denominator).  Main variance uses the
+#' delta method for that ratio, evaluated at the plug-in tie quantities
+#' \code{denom_ind = 1 - sum(p^2)} (package convention: coefficient uses U-stat,
+#' variance uses plug-in).
 #'
 #' @keywords internal
 #' @noRd
@@ -303,8 +315,8 @@ compute_tau_b_variance <- function(X, Y, IID = TRUE, version = "v2") {
 
   pre_x <- tau_b_tie_preamble(X)
   pre_y <- tau_b_tie_preamble(Y)
-  sx <- pre_x$tau_self
-  sy <- pre_y$tau_self
+  sx <- pre_x$denom_ind
+  sy <- pre_y$denom_ind
 
   K_tau_fn <- if (version == "v1") K_tau_vec_v1 else K_tau_vec_v2
   k_tau <- K_tau_fn(X, Y, tau)
@@ -401,7 +413,8 @@ ind_covariance_tau_b_hac <- function(X, Y) {
 #' covariance is \eqn{J \Sigma_\theta J^\top} with \eqn{\theta = (\tau^{(1)},
 #' s_x^{(1)}, \ldots, \tau^{(m)}, s_x^{(m)}, s_y)} and one shared \eqn{s_y}
 #' column; \eqn{\Sigma_\theta} from stacked influences (IID or HAC).  Same
-#' sqrt-denominator delta method as \code{compute_tau_b_variance()}.
+#' sqrt-denominator delta method as \code{compute_tau_b_variance()}, with the
+#' gradient evaluated at the plug-in margins \code{1 - sum(p^2)}.
 #'
 #' @param X Numeric matrix \code{n x m}.
 #' @param Y Numeric outcome vector.
@@ -418,7 +431,7 @@ compute_tau_b_multivariate_variance <- function(X, Y, IID = TRUE, version = "v2"
   K_tau_fn <- if (version == "v1") K_tau_vec_v1 else K_tau_vec_v2
 
   pre_y <- tau_b_tie_preamble(Y)
-  sy <- pre_y$tau_self
+  sy <- pre_y$denom_ind
   ky <- pre_y$k_self
 
   tau_vec <- numeric(m)
@@ -429,7 +442,7 @@ compute_tau_b_multivariate_variance <- function(X, Y, IID = TRUE, version = "v2"
     tau_result <- compute_kendall(X[, k], Y)
     tau_vec[k] <- tau_result$expectation
     pre_x <- tau_b_tie_preamble(X[, k])
-    sx_vec[k] <- pre_x$tau_self
+    sx_vec[k] <- pre_x$denom_ind
     Psi[, 2 * k - 1] <- 2 * K_tau_fn(X[, k], Y, tau_vec[k])
     Psi[, 2 * k] <- 2 * pre_x$k_self
   }

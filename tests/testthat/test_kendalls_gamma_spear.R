@@ -709,7 +709,9 @@ test_that("compute_tau_b_variance IID matches grad-prime Sigma grad (sqrt tau_b)
   pre_x <- acor:::tau_b_tie_preamble(X)
   pre_y <- acor:::tau_b_tie_preamble(Y)
   k_tau <- acor:::K_tau_vec_v2(X, Y, tau)
-  grad <- acor:::tau_b_gradient(tau, pre_x$tau_self, pre_y$tau_self)
+  # Package convention: variance gradient evaluated at the plug-in margins
+  # denom_ind = 1 - sum(p^2), and the IF projection k_self is centred there.
+  grad <- acor:::tau_b_gradient(tau, pre_x$denom_ind, pre_y$denom_ind)
   S <- acor:::tau_b_iid_covariance(k_tau, pre_x$k_self, pre_y$k_self)
   v_manual <- as.numeric(t(grad) %*% S %*% grad)
   v_pkg <- acor:::compute_tau_b_variance(X, Y, IID = TRUE)$var
