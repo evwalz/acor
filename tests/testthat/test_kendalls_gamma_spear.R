@@ -343,7 +343,7 @@ test_that("acor.test works for pearson single predictor", {
   X <- rnorm(n)
   Y <- 0.3 * X + rnorm(n, sd = 0.8)
   
-  result <- acor:::acor.test(X, Y, method = "pearson")
+  result <- acor:::acor.test(X, Y, method = "pearson", variance = "plugin")
   ref <- cor.test(X, Y, method = "pearson")
   
   expect_equal(unname(result$estimate), unname(ref$estimate), tolerance = 1e-10)
@@ -421,7 +421,7 @@ test_that("acor.test works for multivariate pearson IID", {
   Y <- 0.3 * X1 + 0.2 * X2 + rnorm(n)
   X_mat <- cbind(X1, X2, X3)
 
-  result <- acor.test(X_mat, Y, method = "pearson", IID = TRUE)
+  result <- acor.test(X_mat, Y, method = "pearson", IID = TRUE, variance = "plugin")
 
   expect_length(result$estimate, 3)
   expect_equal(nrow(result$pairwise_results), 3)
@@ -440,7 +440,7 @@ test_that("acor.test multivariate pearson HAC returns valid output", {
   Y <- 0.3 * X1 + rnorm(n)
   X_mat <- cbind(X1, X2)
 
-  result <- acor.test(X_mat, Y, method = "pearson", IID = FALSE)
+  result <- acor.test(X_mat, Y, method = "pearson", IID = FALSE, variance = "plugin")
 
   expect_length(result$estimate, 2)
   expect_true(all(diag(result$variance) > 0))
@@ -1261,7 +1261,7 @@ test_that("acor.test works for rho_a single predictor", {
   X <- rnorm(n)
   Y <- rnorm(n)
   
-  result <- acor:::acor.test(X, Y, method = "rho_a")
+  result <- acor:::acor.test(X, Y, method = "rho_a", variance = "plugin")
   
   expect_s3_class(result, "acor_htest")
   expect_equal(unname(result$estimate), acor(X, Y, method = "rho_a")$estimate, tolerance = 1e-10)
@@ -1275,7 +1275,7 @@ test_that("acor.test works for rho_a multiple predictors", {
   X <- matrix(rnorm(200), ncol = 2)
   Y <- rnorm(n)
   
-  result <- acor:::acor.test(X, Y, method = "rho_a")
+  result <- acor:::acor.test(X, Y, method = "rho_a", variance = "plugin")
   
   expect_s3_class(result, "acor_htest")
   expect_length(result$estimate, 2)

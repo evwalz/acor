@@ -492,21 +492,19 @@ gamma_tie_preamble <- function(X, Y) {
 
   x_probs <- x_freq / N
   y_probs <- y_freq / N
+  xy_probs <- xy_freq / N
+  
   x_tie_prob <- sum(x_probs^2)
   y_tie_prob <- sum(y_probs^2)
+  xy_tie_prob <- sum(xy_probs^2)
 
-  num_pairs <- N * (N - 1) / 2
-  x_tied_pairs <- sum(x_freq * (x_freq - 1)) / 2
-  y_tied_pairs <- sum(y_freq * (y_freq - 1)) / 2
-  xy_tied_pairs <- sum(xy_freq * (xy_freq - 1)) / 2
-  nu <- (x_tied_pairs + y_tied_pairs - xy_tied_pairs) / num_pairs
+  nu <- x_tie_prob + y_tie_prob - xy_tie_prob         # plug-in (RCor style)
 
-  freq_x_i <- prob_y(X) * N
-  freq_y_i <- prob_y(Y) * N
+  freq_x_i  <- prob_y(X) * N
+  freq_y_i  <- prob_y(Y) * N
   freq_xy_i <- prob_xy(X, Y) * N
 
-  H_nu_i <- (freq_x_i - 1) + (freq_y_i - 1) - (freq_xy_i - 1)
-  k_nu <- H_nu_i / (N - 1) - nu
+  k_nu <- (freq_x_i + freq_y_i - freq_xy_i) / N - nu  # plug-in influence function
 
   list(
     x_tie_prob = x_tie_prob,

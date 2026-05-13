@@ -163,15 +163,18 @@ print.acor <- function(x, ...) {
 #' @param IID Logical; if `FALSE`, inference is performed under time-series
 #'   assumptions and a HAC variance estimator is used.
 #' @param variance Character string specifying the variance estimation method:
-#'   * `"delta"` (default): delta-method / kernel-based variance
-#'   * `"ij"`: infinitesimal jackknife variance
+#'   * `"ij"` (default): infinitesimal jackknife variance (supported for
+#'     `"akc"`, `"agc"`, `"cid"`, `"cma"`, `"tau_b"`, `"gamma"`, and `"rho_b"`).
+#'   * `"plugin"`: plug-in asymptotic variance (closed-form / kernel estimators,
+#'     including delta-method expressions where used); use this for methods
+#'     without an IJ implementation (e.g. \code{"pearson"}, \code{"tau_a"},
+#'     \code{"rho_a"}) or to match the older default behaviour.
 #'
-#'   The `"ij"` option is supported for `"akc"`, `"agc"`, `"cid"`,
-#'   `"cma"`, `"tau_b"`, `"gamma"`, and `"rho_b"`. When `IID = FALSE`,
-#'   the Bartlett-kernel HAC estimator is applied to the IJ influence
-#'   function values.
+#'   When \code{variance = "ij"} and \code{IID = FALSE}, the Bartlett-kernel HAC
+#'   estimator is applied to the IJ influence function values.
 #'   The independence variance uses the same closed-form formula regardless
-#'   of the variance method.
+#'   of the variance method. The name \code{"delta"} is accepted as a
+#'   deprecated synonym for \code{"plugin"}.
 #' @param aeq_y Logical. If \code{TRUE}, merge nearly-equal \code{Y} before
 #'   computation (default tolerance \code{sqrt(.Machine$double.eps)}), aligned
 #'   with \code{survival::concordance()}; if \code{FALSE}, exact equality on
@@ -234,8 +237,8 @@ print.acor <- function(x, ...) {
 #' # Test if CMA differs from 0.5 (independence test)
 #' test_result <- acor.test(x, y, method = "cma", alternative = "two.sided")
 #'
-#' # Pearson inference
-#' test_result <- acor.test(x, y, method = "pearson")
+#' # Pearson inference (plugin variance; no IJ for pearson)
+#' test_result <- acor.test(x, y, method = "pearson", variance = "plugin")
 #'
 #' # rho_b inference
 #' test_result <- acor.test(x, y, method = "rho_b")
@@ -246,11 +249,11 @@ print.acor <- function(x, ...) {
 #' # gamma inference
 #' test_result <- acor.test(x, y, method = "gamma")
 #' 
-#' # Infinitesimal jackknife variance for AKC
-#' test_ij <- acor.test(x, y, method = "akc", variance = "ij")
+#' # Default IJ variance for AKC (same as omitting variance=)
+#' test_ij <- acor.test(x, y, method = "akc")
 #'
-#' # IJ is also available for tau_b, gamma, and rho_b
-#' acor.test(x, y, method = "tau_b", variance = "ij")
+#' # Plug-in variance instead of default IJ
+#' acor.test(x, y, method = "tau_b", variance = "plugin")
 #'
 #' # Compare multiple predictors
 #' x1 <- rnorm(100)
@@ -267,13 +270,18 @@ acor.test <- function(X, Y,
                       conf.level = 0.95,
                       fisher = FALSE, 
                       IID = TRUE,
-                      variance = c("delta", "ij"),
+                      variance = c("ij", "plugin"),
                       aeq_y = FALSE) {
   
   dname <- paste(deparse(substitute(X)), "and", deparse(substitute(Y)))
   method <- match.arg(method)
   alternative <- match.arg(alternative)
-  variance_method <- match.arg(variance)
+  if (is.character(variance) && length(variance) == 1L && !is.na(variance) &&
+      variance == "delta") {
+    .Deprecated(msg = "variance = \"delta\" is deprecated; use variance = \"plugin\".")
+    variance <- "plugin"
+  }
+  variance_method <- match.arg(variance, c("ij", "plugin"))
   if (!is.numeric(conf.level) || length(conf.level) != 1 || is.na(conf.level) ||
       conf.level <= 0 || conf.level >= 1) {
     stop("'conf.level' must be a single number between 0 and 1")
@@ -340,7 +348,10 @@ acor.test <- function(X, Y,
   # Compute estimates and variance based on method
   if (method %in% c("akc", "cid")) {
     if (variance_method == "ij") {
+      # Coefficient (point estimate) uses U-statistic p_Y inside akc_ij_cpp.
+      # Independence variance follows the package convention: plug-in p_Y.
       p_Y <- compute_tau_Y(Y)$p_tie_y
+      p_Y_plugin <- ((n - 1) / n) * p_Y + 1 / n
       
       if (m == 1) {
         result <- akc_ij_cpp(X[, 1], Y)
@@ -348,10 +359,10 @@ acor.test <- function(X, Y,
         ic <- result$ic
         if (IID) {
           Sigma_akc <- result$var_ij
-          Sigma_akc_ind <- ind_variance_akc_iid(X[, 1], Y, p_Y)
+          Sigma_akc_ind <- ind_variance_akc_iid(X[, 1], Y, p_Y_plugin)
         } else {
           Sigma_akc <- hac_variance_univariate(ic, scale_factor = 1)
-          Sigma_akc_ind <- ind_variance_akc_hac(X[, 1], Y, p_Y)
+          Sigma_akc_ind <- ind_variance_akc_hac(X[, 1], Y, p_Y_plugin)
         }
       } else {
         IC_mat <- matrix(0, nrow = n, ncol = m)
@@ -363,10 +374,10 @@ acor.test <- function(X, Y,
         }
         if (IID) {
           Sigma_akc <- crossprod(IC_mat) / n
-          Sigma_akc_ind <- ind_covariance_akc_iid(X, Y, p_Y)
+          Sigma_akc_ind <- ind_covariance_akc_iid(X, Y, p_Y_plugin)
         } else {
           Sigma_akc <- hac_covariance_multivariate(IC_mat, scale_factor = 1)
-          Sigma_akc_ind <- ind_covariance_akc_hac(X, Y, p_Y)
+          Sigma_akc_ind <- ind_covariance_akc_hac(X, Y, p_Y_plugin)
         }
       }
     } else {

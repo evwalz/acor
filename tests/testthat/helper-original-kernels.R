@@ -50,7 +50,8 @@ kernel_expectation <- function(X, Y, tau_XY, tau_y, p_Y) {
   for (i in 1:n) {
     k_tau_i <- K_tau(X[i], Y[i], X, Y, tau_XY)
     k_p_i <- K_p(Y[i], Y, tau_y)
-    diff <- k_tau_i - (tau_XY / (1 - p_Y)) * k_p_i
+    # Must match acor:::compute_adjusted_K (same sign as K_tau + (tau/(1-p_Y))*K_p)
+    diff <- k_tau_i + (tau_XY / (1 - p_Y)) * k_p_i
     squared_diffs[i] <- diff^2
   }
   
@@ -71,20 +72,23 @@ kernel_expectation <- function(X, Y, tau_XY, tau_y, p_Y) {
 #' @keywords internal
 #' @noRd
 Sigma_akc <- function(X, Y) {
+  n <- length(Y)
   tau_Y_result <- compute_tau_Y(Y)
-  tau_Y <- tau_Y_result$expectation
   p_Y   <- tau_Y_result$p_tie_y
+  
+  p_Y_plugin   <- ((n - 1) / n) * p_Y + 1 / n
+  tau_Y_plugin <- 1 - p_Y_plugin
   
   akc_result <- compute_kendall(X, Y)
   akc    <- akc_result$tau
   tau_XY <- akc_result$expectation
   
-  scale_factor <- 4 / (1 - p_Y)^2
-  expected_val <- kernel_expectation(X, Y, tau_XY, tau_Y, p_Y)
+  scale_factor <- 4 / (1 - p_Y_plugin)^2
+  expected_val <- kernel_expectation(X, Y, tau_XY, tau_Y_plugin, p_Y_plugin)
   
   list(akc = akc,
        var = scale_factor * expected_val,
-       var_ind = ind_variance_akc_iid(X, Y, p_Y))
+       var_ind = ind_variance_akc_iid(X, Y, p_Y_plugin))
 }
 
 #' AKC variance for time series (HAC, point-wise kernels)
@@ -98,27 +102,29 @@ Sigma_akc_ts <- function(X, Y) {
   n <- length(Y)
   
   tau_Y_result <- compute_tau_Y(Y)
-  tau_Y <- tau_Y_result$expectation
   p_Y   <- tau_Y_result$p_tie_y
+  
+  p_Y_plugin   <- ((n - 1) / n) * p_Y + 1 / n
+  tau_Y_plugin <- 1 - p_Y_plugin
   
   akc_result <- compute_kendall(X, Y)
   akc    <- akc_result$tau
   tau_XY <- akc_result$expectation
   
-  scale_factor <- 4 / (1 - p_Y)^2
+  scale_factor <- 4 / (1 - p_Y_plugin)^2
   
   K_tau_values <- numeric(n)
   K_p_values   <- numeric(n)
   for (i in seq_len(n)) {
     K_tau_values[i] <- K_tau(X[i], Y[i], X, Y, tau_XY)
-    K_p_values[i]   <- K_p(Y[i], Y, tau_Y)
+    K_p_values[i]   <- K_p(Y[i], Y, tau_Y_plugin)
   }
   
-  adjusted_K <- compute_adjusted_K(K_tau_values, K_p_values, tau_XY, p_Y)
+  adjusted_K <- compute_adjusted_K(K_tau_values, K_p_values, tau_XY, p_Y_plugin)
   
   list(akc = akc,
        var = hac_variance_univariate(adjusted_K, scale_factor),
-       var_ind = ind_variance_akc_hac(X, Y, p_Y))
+       var_ind = ind_variance_akc_hac(X, Y, p_Y_plugin))
 }
 
 
@@ -140,8 +146,10 @@ Sigma_akc_multivariate <- function(X, Y) {
   m <- ncol(X)
   
   tau_Y_result <- compute_tau_Y(Y)
-  tau_Y <- tau_Y_result$expectation
   p_Y   <- tau_Y_result$p_tie_y
+  
+  p_Y_plugin   <- ((n - 1) / n) * p_Y + 1 / n
+  tau_Y_plugin <- 1 - p_Y_plugin
   
   akc_vector <- numeric(m)
   tau_vector <- numeric(m)
@@ -149,7 +157,7 @@ Sigma_akc_multivariate <- function(X, Y) {
   K_p_values <- numeric(n)
   
   for (i in seq_len(n)) {
-    K_p_values[i] <- K_p(Y[i], Y, tau_Y)
+    K_p_values[i] <- K_p(Y[i], Y, tau_Y_plugin)
   }
   
   for (k in seq_len(m)) {
@@ -163,9 +171,9 @@ Sigma_akc_multivariate <- function(X, Y) {
     }
   }
   
-  scale_factor <- 4 / ((1 - p_Y)^2)
+  scale_factor <- 4 / ((1 - p_Y_plugin)^2)
   adjusted_K_tau <- compute_adjusted_K_matrix(K_tau_values, K_p_values,
-                                              tau_vector, p_Y)
+                                              tau_vector, p_Y_plugin)
   
   Sigma <- matrix(0, nrow = m, ncol = m)
   for (k in seq_len(m)) {
@@ -177,7 +185,7 @@ Sigma_akc_multivariate <- function(X, Y) {
   
   list(akc_vector = akc_vector,
        Sigma = Sigma,
-       Sigma_ind = ind_covariance_akc_iid(X, Y, p_Y))
+       Sigma_ind = ind_covariance_akc_iid(X, Y, p_Y_plugin))
 }
 
 #' Multivariate AKC covariance for time series (HAC, point-wise kernels)
@@ -193,8 +201,10 @@ Sigma_akc_multivariate_ts <- function(X, Y) {
   m <- ncol(X)
   
   tau_Y_result <- compute_tau_Y(Y)
-  tau_Y <- tau_Y_result$expectation
   p_Y   <- tau_Y_result$p_tie_y
+  
+  p_Y_plugin   <- ((n - 1) / n) * p_Y + 1 / n
+  tau_Y_plugin <- 1 - p_Y_plugin
   
   akc_vector <- numeric(m)
   tau_vector <- numeric(m)
@@ -202,7 +212,7 @@ Sigma_akc_multivariate_ts <- function(X, Y) {
   K_p_values <- numeric(n)
   
   for (i in seq_len(n)) {
-    K_p_values[i] <- K_p(Y[i], Y, tau_Y)
+    K_p_values[i] <- K_p(Y[i], Y, tau_Y_plugin)
   }
   
   for (k in seq_len(m)) {
@@ -216,9 +226,9 @@ Sigma_akc_multivariate_ts <- function(X, Y) {
     }
   }
   
-  scale_factor <- 4 / ((1 - p_Y)^2)
+  scale_factor <- 4 / ((1 - p_Y_plugin)^2)
   adjusted_K_tau <- compute_adjusted_K_matrix(K_tau_values, K_p_values,
-                                              tau_vector, p_Y)
+                                              tau_vector, p_Y_plugin)
   
   # Element-wise HAC covariance (for original kernel compatibility)
   b <- floor(2 * n^(1 / 3))
@@ -246,7 +256,7 @@ Sigma_akc_multivariate_ts <- function(X, Y) {
   
   list(akc_vector = akc_vector,
        Sigma = Sigma,
-       Sigma_ind = ind_covariance_akc_hac(X, Y, p_Y))
+       Sigma_ind = ind_covariance_akc_hac(X, Y, p_Y_plugin))
 }
 
 

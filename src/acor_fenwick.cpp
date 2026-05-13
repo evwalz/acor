@@ -240,6 +240,9 @@ double pair_tie_proportion_cpp(NumericVector V) {
 // kendall_tau_sign_cpp
 //
 // Computes the asymmetric Kendall tau statistic using a Fenwick tree.
+// Counting uses *unordered* distinct pairs only (i < j), i.e. num_pairs =
+// n*(n-1)/2, so expectation = (C - D) / num_pairs matches (C-D)/choose(n,2)
+// in classical pair / U-statistic enumeration (same spirit as RCor DoCount).
 // Returns: list(tau, expectation)
 // ============================================================================
 

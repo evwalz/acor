@@ -20,6 +20,10 @@ compute_tau_Y <- function(Y) {
 
 #' Dispatch Kendall tau sign computation (binary-optimized or general)
 #'
+#' Uses unordered distinct pairs only: \code{expectation = (C - D) / (n(n-1)/2)}
+#' from \code{kendall_tau_sign_cpp} (or the binary path), not an \eqn{n^2}
+#' ordered-pair average.
+#'
 #' @param X Numeric predictor vector.
 #' @param Y Numeric outcome vector.
 #' @return List with elements \code{tau} and \code{expectation}.
@@ -148,7 +152,7 @@ hac_covariance_multivariate <- function(adjusted_K_tau, scale_factor) {
 #' @keywords internal
 #' @noRd
 compute_adjusted_K <- function(K_tau_values, K_p_values, tau_XY, p_Y) {
-  K_tau_values - (tau_XY / (1 - p_Y)) * K_p_values
+  K_tau_values + (tau_XY / (1 - p_Y)) * K_p_values
 }
 
 #' Build adjusted kernel matrix for multiple predictors
@@ -164,7 +168,7 @@ compute_adjusted_K_matrix <- function(K_tau_matrix, K_p_values, tau_vector, p_Y)
   m <- ncol(K_tau_matrix)
   adjusted <- K_tau_matrix
   for (k in seq_len(m)) {
-    adjusted[, k] <- K_tau_matrix[, k] - (tau_vector[k] / (1 - p_Y)) * K_p_values
+    adjusted[, k] <- K_tau_matrix[, k] + (tau_vector[k] / (1 - p_Y)) * K_p_values
   }
   adjusted
 }
@@ -493,48 +497,65 @@ K_tau_vec_v2 <- function(X, Y, tau_XY) {
 #' @keywords internal
 #' @noRd
 Sigma_akc_v1 <- function(X, Y, tau_XY, tau_Y, p_Y) {
-  scale_factor <- 4 / (1 - p_Y)^2
+  n <- length(Y)
+  p_Y_plugin   <- ((n - 1) / n) * p_Y + 1 / n
+  tau_Y_plugin <- 1 - p_Y_plugin
+  
+  scale_factor <- 4 / (1 - p_Y_plugin)^2
   adjusted_K <- compute_adjusted_K(K_tau_vec_v1(X, Y, tau_XY),
-                                   K_p_vec(Y, tau_Y), tau_XY, p_Y)
-  list(akc = tau_XY / (1 - p_Y),
+                                   K_p_vec(Y, tau_Y_plugin),
+                                   tau_XY, p_Y_plugin)
+  list(akc = tau_XY / (1 - p_Y),                              # unchanged
        var = iid_variance_univariate(adjusted_K, scale_factor),
-       var_ind = ind_variance_akc_iid(X, Y, p_Y))
+       var_ind = ind_variance_akc_iid(X, Y, p_Y_plugin))
 }
+
 
 #' IID variance using v2 (Fenwick tree) kernels
 #' @keywords internal
 #' @noRd
 Sigma_akc_v2 <- function(X, Y, tau_XY, tau_Y, p_Y) {
-  scale_factor <- 4 / (1 - p_Y)^2
+  n <- length(Y)
+  p_Y_plugin   <- ((n - 1) / n) * p_Y + 1 / n
+  tau_Y_plugin <- 1 - p_Y_plugin
+  scale_factor <- 4 / (1 - p_Y_plugin)^2
   adjusted_K <- compute_adjusted_K(K_tau_vec_v2(X, Y, tau_XY),
-                                   K_p_vec(Y, tau_Y), tau_XY, p_Y)
+                                   K_p_vec(Y, tau_Y_plugin), tau_XY, p_Y_plugin)
   list(akc = tau_XY / (1 - p_Y),
        var = iid_variance_univariate(adjusted_K, scale_factor),
-       var_ind = ind_variance_akc_iid(X, Y, p_Y))
+       var_ind = ind_variance_akc_iid(X, Y, p_Y_plugin))
 }
 
 #' HAC variance using v1 kernels
 #' @keywords internal
 #' @noRd
 Sigma_akc_ts_v1 <- function(X, Y, tau_XY, tau_Y, p_Y) {
-  scale_factor <- 4 / (1 - p_Y)^2
+  n <- length(Y)
+  p_Y_plugin   <- ((n - 1) / n) * p_Y + 1 / n
+  tau_Y_plugin <- 1 - p_Y_plugin
+  scale_factor <- 4 / (1 - p_Y_plugin)^2
   adjusted_K <- compute_adjusted_K(K_tau_vec_v1(X, Y, tau_XY),
-                                   K_p_vec(Y, tau_Y), tau_XY, p_Y)
+                                   K_p_vec(Y, tau_Y_plugin),
+                                   tau_XY, p_Y_plugin)
   list(akc = tau_XY / (1 - p_Y),
        var = hac_variance_univariate(adjusted_K, scale_factor),
-       var_ind = ind_variance_akc_hac(X, Y, p_Y))
+       var_ind = ind_variance_akc_hac(X, Y, p_Y_plugin))
 }
 
 #' HAC variance using v2 kernels
 #' @keywords internal
 #' @noRd
 Sigma_akc_ts_v2 <- function(X, Y, tau_XY, tau_Y, p_Y) {
-  scale_factor <- 4 / (1 - p_Y)^2
+  n <- length(Y)
+  p_Y_plugin   <- ((n - 1) / n) * p_Y + 1 / n
+  tau_Y_plugin <- 1 - p_Y_plugin
+  scale_factor <- 4 / (1 - p_Y_plugin)^2
   adjusted_K <- compute_adjusted_K(K_tau_vec_v2(X, Y, tau_XY),
-                                   K_p_vec(Y, tau_Y), tau_XY, p_Y)
+                                   K_p_vec(Y, tau_Y_plugin),
+                                   tau_XY, p_Y_plugin)
   list(akc = tau_XY / (1 - p_Y),
        var = hac_variance_univariate(adjusted_K, scale_factor),
-       var_ind = ind_variance_akc_hac(X, Y, p_Y))
+       var_ind = ind_variance_akc_hac(X, Y, p_Y_plugin))
 }
 
 
@@ -558,7 +579,6 @@ multivariate_kernel_preamble <- function(X, Y, K_tau_vec_fn, K_p_vec_fn) {
   m <- ncol(X)
   
   tau_Y_result <- compute_tau_Y(Y)
-  tau_Y <- tau_Y_result$expectation
   p_Y   <- tau_Y_result$p_tie_y
   
   if (1 - p_Y < 1e-10) {
@@ -566,11 +586,14 @@ multivariate_kernel_preamble <- function(X, Y, K_tau_vec_fn, K_p_vec_fn) {
          "AKC variance is undefined")
   }
   
+  p_Y_plugin   <- ((n - 1) / n) * p_Y + 1 / n
+  tau_Y_plugin <- 1 - p_Y_plugin
+  
   akc_vector <- numeric(m)
   tau_vector <- numeric(m)
   K_tau_values <- matrix(0, nrow = n, ncol = m)
   
-  K_p_values <- K_p_vec_fn(Y, tau_Y)
+  K_p_values <- K_p_vec_fn(Y, tau_Y_plugin)
   
   for (k in seq_len(m)) {
     X_k <- X[, k]
@@ -580,11 +603,12 @@ multivariate_kernel_preamble <- function(X, Y, K_tau_vec_fn, K_p_vec_fn) {
     K_tau_values[, k] <- K_tau_vec_fn(X_k, Y, tau_vector[k])
   }
   
-  scale_factor <- 4 / ((1 - p_Y)^2)
+  scale_factor <- 4 / ((1 - p_Y_plugin)^2)
   adjusted_K_tau <- compute_adjusted_K_matrix(K_tau_values, K_p_values,
-                                              tau_vector, p_Y)
+                                              tau_vector, p_Y_plugin)
   
-  list(n = n, m = m, p_Y = p_Y, akc_vector = akc_vector,
+  list(n = n, m = m, p_Y = p_Y, p_Y_plugin = p_Y_plugin,
+       akc_vector = akc_vector,
        tau_vector = tau_vector, adjusted_K_tau = adjusted_K_tau,
        scale_factor = scale_factor)
 }
@@ -598,7 +622,7 @@ Sigma_akc_multivariate_v1 <- function(X, Y) {
   Sigma <- iid_covariance_multivariate(pre$adjusted_K_tau, pre$scale_factor)
   list(akc_vector = pre$akc_vector,
        Sigma = Sigma,
-       Sigma_ind = ind_covariance_akc_iid(X, Y, pre$p_Y))
+       Sigma_ind = ind_covariance_akc_iid(X, Y, pre$p_Y_plugin))
 }
 
 #' Multivariate IID covariance using v2 kernels
@@ -610,7 +634,7 @@ Sigma_akc_multivariate_v2 <- function(X, Y) {
   Sigma <- iid_covariance_multivariate(pre$adjusted_K_tau, pre$scale_factor)
   list(akc_vector = pre$akc_vector,
        Sigma = Sigma,
-       Sigma_ind = ind_covariance_akc_iid(X, Y, pre$p_Y))
+       Sigma_ind = ind_covariance_akc_iid(X, Y, pre$p_Y_plugin))
 }
 
 #' Multivariate HAC covariance using v1 kernels
@@ -622,7 +646,7 @@ Sigma_akc_multivariate_ts_v1 <- function(X, Y) {
   Sigma <- hac_covariance_multivariate(pre$adjusted_K_tau, pre$scale_factor)
   list(akc_vector = pre$akc_vector,
        Sigma = Sigma,
-       Sigma_ind = ind_covariance_akc_hac(X, Y, pre$p_Y))
+       Sigma_ind = ind_covariance_akc_hac(X, Y, pre$p_Y_plugin))
 }
 
 #' Multivariate HAC covariance using v2 kernels
@@ -634,5 +658,5 @@ Sigma_akc_multivariate_ts_v2 <- function(X, Y) {
   Sigma <- hac_covariance_multivariate(pre$adjusted_K_tau, pre$scale_factor)
   list(akc_vector = pre$akc_vector,
        Sigma = Sigma,
-       Sigma_ind = ind_covariance_akc_hac(X, Y, pre$p_Y))
+       Sigma_ind = ind_covariance_akc_hac(X, Y, pre$p_Y_plugin))
 }

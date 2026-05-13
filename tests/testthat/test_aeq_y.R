@@ -41,7 +41,7 @@ test_that("acor.test pearson can differ when aeq_y merges near-duplicate Y", {
   set.seed(14)
   x <- rnorm(15)
   y <- c(rnorm(13), 1.0, 1.0 + 1e-10)
-  p0 <- acor.test(x, y, method = "pearson", aeq_y = FALSE)$estimate
-  p1 <- acor.test(x, y, method = "pearson", aeq_y = TRUE)$estimate
+  p0 <- acor.test(x, y, method = "pearson", aeq_y = FALSE, variance = "plugin")$estimate
+  p1 <- acor.test(x, y, method = "pearson", aeq_y = TRUE, variance = "plugin")$estimate
   expect_true(is.finite(p0) && is.finite(p1))
 })

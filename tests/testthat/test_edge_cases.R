@@ -113,7 +113,8 @@ test_that("acor.test() accepts multivariate rho_b inference", {
 test_that("acor.test() rejects HAC inference with fewer than 3 observations", {
   expect_error(acor.test(c(1, 2), c(1, 2), method = "akc", IID = FALSE),
                "At least 3 observations")
-  expect_error(acor.test(cbind(c(1, 2), c(2, 1)), c(1, 2), method = "rho_a", IID = FALSE),
+  expect_error(acor.test(cbind(c(1, 2), c(2, 1)), c(1, 2), method = "rho_a",
+                         variance = "plugin", IID = FALSE),
                "At least 3 observations")
 })
 
@@ -183,15 +184,17 @@ test_that("Fisher CI works for multivariate (m >= 2)", {
 test_that("Perfect concordance (AKC near +1) does not produce Inf", {
   x <- 1:20
   y <- 1:20
-  result <- acor.test(x, y, method = "akc", fisher = TRUE)
+  result <- acor.test(x, y, method = "akc", fisher = TRUE, variance = "plugin")
   expect_true(all(is.finite(result$conf.int)))
   expect_true(is.finite(result$statistic))
 })
 
-test_that("Perfect discordance (AKC near -1) does not produce Inf", {
+test_that("Strong discordance (AKC near -1) does not produce Inf under Fisher", {
+  set.seed(602)
   x <- 1:20
-  y <- 20:1
-  result <- acor.test(x, y, method = "akc", fisher = TRUE)
+  y <- -(1:20) + rnorm(20, sd = 0.5)
+  result <- acor.test(x, y, method = "akc", fisher = TRUE, variance = "plugin")
+  expect_gt(abs(result$estimate), 0.9)
   expect_true(all(is.finite(result$conf.int)))
   expect_true(is.finite(result$statistic))
 })
@@ -215,7 +218,7 @@ test_that("Multivariate with near-perfect correlation and Fisher does not error"
   x2 <- rnorm(30)
   y <- 1:30
   X <- cbind(x1, x2)
-  result <- acor.test(X, y, method = "akc", fisher = TRUE)
+  result <- acor.test(X, y, method = "akc", fisher = TRUE, variance = "plugin")
   expect_true(all(is.finite(result$results$CI_lower)))
   expect_true(all(is.finite(result$results$CI_upper)))
 })
@@ -462,11 +465,13 @@ test_that("acor.test() with IID = FALSE works for m >= 2 (CMA)", {
 # Section 9: Infinitesimal jackknife (IJ) variance — validation & smoke tests
 # ============================================================================
 
-test_that("acor.test() rejects variance='ij' for unsupported methods", {
+test_that("acor.test() rejects IJ variance for unsupported methods (explicit or default)", {
   set.seed(1234)
   x <- rnorm(50); y <- rnorm(50)
   for (m in c("tau_a", "rho_a", "pearson")) {
     expect_error(acor.test(x, y, method = m, variance = "ij"),
+                 "only supported for methods")
+    expect_error(acor.test(x, y, method = m),
                  "only supported for methods")
   }
 })
@@ -608,69 +613,81 @@ test_that("acor.test() with variance='ij' works for CID and CMA", {
   expect_true(res_cma$variance_ind > 0)
 })
 
-test_that("IJ and delta give same point estimate for AKC", {
+test_that("IJ and plugin give same point estimate for AKC", {
   set.seed(2004)
   x <- rnorm(200); y <- x + rnorm(200)
   
-  res_delta <- acor.test(x, y, method = "akc", variance = "delta")
-  res_ij    <- acor.test(x, y, method = "akc", variance = "ij")
+  res_plugin <- acor.test(x, y, method = "akc", variance = "plugin")
+  res_ij     <- acor.test(x, y, method = "akc", variance = "ij")
   
-  expect_equal(unname(res_ij$estimate), unname(res_delta$estimate),
+  expect_equal(unname(res_ij$estimate), unname(res_plugin$estimate),
                tolerance = 1e-10)
 })
 
-test_that("IJ and delta give same point estimate for AGC", {
+test_that("IJ and plugin give same point estimate for AGC", {
   set.seed(2005)
   x <- rnorm(200); y <- x + rnorm(200)
   
-  res_delta <- acor.test(x, y, method = "agc", variance = "delta")
-  res_ij    <- acor.test(x, y, method = "agc", variance = "ij")
+  res_plugin <- acor.test(x, y, method = "agc", variance = "plugin")
+  res_ij     <- acor.test(x, y, method = "agc", variance = "ij")
   
-  expect_equal(unname(res_ij$estimate), unname(res_delta$estimate),
+  expect_equal(unname(res_ij$estimate), unname(res_plugin$estimate),
                tolerance = 1e-10)
 })
 
-test_that("IJ and delta give identical independence variance for AKC", {
+test_that("IJ and plugin give identical independence variance for AKC", {
   set.seed(2006)
   x <- rnorm(200); y <- x + rnorm(200)
   
-  res_delta <- acor.test(x, y, method = "akc", variance = "delta")
-  res_ij    <- acor.test(x, y, method = "akc", variance = "ij")
+  res_plugin <- acor.test(x, y, method = "akc", variance = "plugin")
+  res_ij     <- acor.test(x, y, method = "akc", variance = "ij")
   
-  expect_equal(res_ij$variance_ind, res_delta$variance_ind, tolerance = 1e-12)
+  expect_equal(res_ij$variance_ind, res_plugin$variance_ind, tolerance = 1e-12)
 })
 
-test_that("IJ and delta give identical independence variance for AGC", {
+test_that("IJ and plugin give identical independence variance for AGC", {
   set.seed(2007)
   x <- rnorm(200); y <- x + rnorm(200)
   
-  res_delta <- acor.test(x, y, method = "agc", variance = "delta")
-  res_ij    <- acor.test(x, y, method = "agc", variance = "ij")
+  res_plugin <- acor.test(x, y, method = "agc", variance = "plugin")
+  res_ij     <- acor.test(x, y, method = "agc", variance = "ij")
   
-  expect_equal(res_ij$variance_ind, res_delta$variance_ind, tolerance = 1e-12)
+  expect_equal(res_ij$variance_ind, res_plugin$variance_ind, tolerance = 1e-12)
 })
 
-# IJ for tau_b / gamma / rho_b: match delta point estimates and closed-form
+# IJ for tau_b / gamma / rho_b: match plugin point estimates and closed-form
 # independence variance (IJ path uses ind_* helpers only, not compute_*_variance).
 
-test_that("IJ and delta give same point estimate for tau_b, gamma, rho_b", {
+test_that("IJ and plugin give same point estimate for tau_b, gamma, rho_b", {
   set.seed(2010)
   x <- rnorm(200); y <- x + rnorm(200)
   for (m in c("tau_b", "gamma", "rho_b")) {
-    res_d <- acor.test(x, y, method = m, variance = "delta")
+    res_d <- acor.test(x, y, method = m, variance = "plugin")
     res_i <- acor.test(x, y, method = m, variance = "ij")
     expect_equal(unname(res_i$estimate), unname(res_d$estimate), tolerance = 1e-10)
   }
 })
 
-test_that("IJ and delta give identical independence variance for tau_b, gamma, rho_b", {
+test_that("IJ and plugin give identical independence variance for tau_b, gamma, rho_b", {
   set.seed(2011)
   x <- rnorm(200); y <- rnorm(200)
   for (m in c("tau_b", "gamma", "rho_b")) {
-    res_d <- acor.test(x, y, method = m, variance = "delta")
+    res_d <- acor.test(x, y, method = m, variance = "plugin")
     res_i <- acor.test(x, y, method = m, variance = "ij")
     expect_equal(res_i$variance_ind, res_d$variance_ind, tolerance = 1e-12)
   }
+})
+
+test_that("acor.test default variance is plugin; delta is deprecated", {
+  set.seed(2013)
+  x <- rnorm(40)
+  y <- rnorm(40)
+  expect_equal(acor.test(x, y, method = "akc")$variance_method, "ij")
+  expect_warning(
+    r <- acor.test(x, y, method = "akc", variance = "delta"),
+    "deprecated"
+  )
+  expect_equal(r$variance_method, "plugin")
 })
 
 test_that("acor.test variance='ij' IID=FALSE runs for tau_b, gamma, rho_b", {

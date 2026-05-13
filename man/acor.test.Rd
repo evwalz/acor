@@ -13,7 +13,7 @@ acor.test(
   conf.level = 0.95,
   fisher = FALSE,
   IID = TRUE,
-  variance = c("delta", "ij"),
+  variance = c("ij", "plugin"),
   aeq_y = FALSE
 )
 }
@@ -45,16 +45,19 @@ assumptions and a HAC variance estimator is used.}
 
 \item{variance}{Character string specifying the variance estimation method:
 \itemize{
-\item \code{"delta"} (default): delta-method / kernel-based variance
-\item \code{"ij"}: infinitesimal jackknife variance
+\item \code{"ij"} (default): infinitesimal jackknife variance (supported for
+\code{"akc"}, \code{"agc"}, \code{"cid"}, \code{"cma"}, \code{"tau_b"}, \code{"gamma"}, and \code{"rho_b"}).
+\item \code{"plugin"}: plug-in asymptotic variance (closed-form / kernel estimators,
+including delta-method expressions where used); use this for methods
+without an IJ implementation (e.g. \code{"pearson"}, \code{"tau_a"},
+\code{"rho_a"}) or to match the older default behaviour.
 }
 
-The \code{"ij"} option is supported for \code{"akc"}, \code{"agc"}, \code{"cid"},
-\code{"cma"}, \code{"tau_b"}, \code{"gamma"}, and \code{"rho_b"}. When \code{IID = FALSE},
-the Bartlett-kernel HAC estimator is applied to the IJ influence
-function values.
+When \code{variance = "ij"} and \code{IID = FALSE}, the Bartlett-kernel HAC
+estimator is applied to the IJ influence function values.
 The independence variance uses the same closed-form formula regardless
-of the variance method.}
+of the variance method. The name \code{"delta"} is accepted as a
+deprecated synonym for \code{"plugin"}.}
 
 \item{aeq_y}{Logical. If \code{TRUE}, merge nearly-equal \code{Y} before
 computation (default tolerance \code{sqrt(.Machine$double.eps)}), aligned
@@ -123,8 +126,8 @@ test_result <- acor.test(x, y, method = "akc", alternative = "two.sided")
 # Test if CMA differs from 0.5 (independence test)
 test_result <- acor.test(x, y, method = "cma", alternative = "two.sided")
 
-# Pearson inference
-test_result <- acor.test(x, y, method = "pearson")
+# Pearson inference (plugin variance; no IJ for pearson)
+test_result <- acor.test(x, y, method = "pearson", variance = "plugin")
 
 # rho_b inference
 test_result <- acor.test(x, y, method = "rho_b")
@@ -135,11 +138,11 @@ test_result <- acor.test(x, y, method = "tau_b")
 # gamma inference
 test_result <- acor.test(x, y, method = "gamma")
 
-# Infinitesimal jackknife variance for AKC
-test_ij <- acor.test(x, y, method = "akc", variance = "ij")
+# Default IJ variance for AKC (same as omitting variance=)
+test_ij <- acor.test(x, y, method = "akc")
 
-# IJ is also available for tau_b, gamma, and rho_b
-acor.test(x, y, method = "tau_b", variance = "ij")
+# Plug-in variance instead of default IJ
+acor.test(x, y, method = "tau_b", variance = "plugin")
 
 # Compare multiple predictors
 x1 <- rnorm(100)
