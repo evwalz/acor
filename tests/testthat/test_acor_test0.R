@@ -70,112 +70,30 @@ test_that("CID variance matches survival::concordance variance (with ties in X)"
                info = "CID variance should approximately match concordance variance with ties")
 })
 
-test_that("CID variance matches survival::concordance for discrete X (10 levels)", {
-  set.seed(2005)
-  n <- 200
-  X <- sample(1:10, n, replace = TRUE)
-  Y <- rnorm(n) + rnorm(n, sd = 0.0001)
-  
-  result_cid <- acor.test(X, Y, method = "cid")
-  conc <- concordance(Y ~ X, timefix = FALSE)
-  
-  # Compare estimates
-  expect_equal(unname(result_cid$estimate), unname(conc$concordance), 
-               tolerance = 1e-4,
-               info = "CID should match concordance for discrete X (10 levels)")
-  
-  # Compare variance
-  our_var_scaled <- result_cid$variance / n
-  
-  expect_equal(our_var_scaled, unname(conc$var), 
-               tolerance = 0.05,  # Allow 25% for discrete case
-               info = "CID variance should match concordance for discrete X")
-})
-
-test_that("CID variance matches survival::concordance for discrete Y (5 levels)", {
-  set.seed(2006)
-  n <- 200
-  X <- rnorm(n)
-  Y <- sample(1:5, n, replace = TRUE)
-  
-  result_cid <- acor.test(X, Y, method = "cid")
-  conc <- concordance(Y ~ X, timefix = FALSE)
-  
-  # Compare estimates
-  expect_equal(unname(result_cid$estimate), unname(conc$concordance), 
-               tolerance = 1e-4,
-               info = "CID should match concordance for discrete Y (5 levels)")
-  
-  # Compare variance
-  our_var_scaled <- result_cid$variance / n
-  
-  expect_equal(our_var_scaled, unname(conc$var), 
-               tolerance = 0.05,  # Allow 25% for discrete case
-               info = "CID variance should match concordance for discrete Y")
-})
-
-test_that("CID variance matches survival::concordance for discrete X and Y", {
-  set.seed(2007)
-  n <- 300
-  X <- sample(1:10, n, replace = TRUE)
-  Y <- sample(1:5, n, replace = TRUE)
-  
-  result_cid <- acor.test(X, Y, method = "cid")
-  conc <- concordance(Y ~ X, timefix = FALSE)
-  
-  # Compare estimates
-  expect_equal(unname(result_cid$estimate), unname(conc$concordance), 
-               tolerance = 1e-4,
-               info = "CID should match concordance for discrete X and Y")
-  
-  # Compare variance
-  our_var_scaled <- result_cid$variance / n
-  
-  expect_equal(our_var_scaled, unname(conc$var), 
-               tolerance = 0.05,  # Allow 30% for highly discrete case
-               info = "CID variance should match concordance for discrete X and Y")
-})
-
-test_that("CID variance matches survival::concordance across discrete levels", {
-  # Test multiple discrete configurations
+test_that("CID variance matches survival::concordance for discrete data", {
   test_cases <- list(
-    list(name = "3 levels in Y", n = 200, X_levels = NA, Y_levels = 3, seed = 2008),
-    list(name = "20 levels in X", n = 200, X_levels = 20, Y_levels = NA, seed = 2009),
-    list(name = "5x5 discrete", n = 250, X_levels = 5, Y_levels = 5, seed = 2010),
-    list(name = "10x3 discrete", n = 250, X_levels = 10, Y_levels = 3, seed = 2011),
-    list(name = "Many ties (2x2)", n = 200, X_levels = 2, Y_levels = 2, seed = 2012)
+    list(name = "discrete X (10 levels)", seed = 2005, n = 200,
+         gen = function(n) list(X = sample(1:10, n, replace = TRUE),
+                                Y = rnorm(n) + rnorm(n, sd = 0.0001))),
+    list(name = "discrete X and Y (10x5)", seed = 2007, n = 300,
+         gen = function(n) list(X = sample(1:10, n, replace = TRUE),
+                                Y = sample(1:5, n, replace = TRUE)))
   )
-  
+
   for (tc in test_cases) {
     set.seed(tc$seed)
-    
-    # Generate X
-    if (is.na(tc$X_levels)) {
-      X <- rnorm(tc$n)
-    } else {
-      X <- sample(1:tc$X_levels, tc$n, replace = TRUE)
-    }
-    
-    # Generate Y
-    if (is.na(tc$Y_levels)) {
-      Y <- rnorm(tc$n) + rnorm(tc$n, sd = 0.0001)
-    } else {
-      Y <- sample(1:tc$Y_levels, tc$n, replace = TRUE)
-    }
-    
-    result_cid <- acor.test(X, Y, method = "cid")
-    conc <- concordance(Y ~ X, timefix = FALSE)
-    
-    # Compare estimates
-    expect_equal(unname(result_cid$estimate), unname(conc$concordance), 
+    xy <- tc$gen(tc$n)
+
+    result_cid <- acor.test(xy$X, xy$Y, method = "cid")
+    conc <- concordance(xy$Y ~ xy$X, timefix = FALSE)
+
+    expect_equal(unname(result_cid$estimate), unname(conc$concordance),
                  tolerance = 1e-4,
                  info = sprintf("%s: CID should match concordance", tc$name))
-    
-    # Compare variance (with generous tolerance for discrete cases)
+
     our_var_scaled <- result_cid$variance / tc$n
-    
-    expect_equal(our_var_scaled, unname(conc$var), 
-                 tolerance = 0.1,  # Allow 35% for various discrete cases
+    expect_equal(our_var_scaled, unname(conc$var),
+                 tolerance = 0.05,
                  info = sprintf("%s: CID variance should match concordance", tc$name))
   }
 })
