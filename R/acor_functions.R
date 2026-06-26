@@ -24,9 +24,11 @@
 #' @details
 #' Asymmetric measures (directional, Y is the outcome):
 #'   - AKC: Asymmetric Kendall Correlation = 2*CID - 1
-#'   - CID: Concordance-Discordance Index (base measure from Kendall framework)
+#'   - CID: Concordance-Discordance Index (base measure from Kendall framework).
+#'     Matches `survival::concordance(Y ~ x, timefix = FALSE)$concordance` for a
+#'     single numeric predictor (`timefix = FALSE` for exact Y ties, as in this package).
 #'   - AGC: Asymmetric Grade Correlation = 2*CMA - 1
-#'   - CMA: Coefficient of Monotone Association
+#'   - CMA: Coefficient of Monotone Association, equal to `(AGC + 1) / 2`
 #' 
 #' Kendall rank correlations (symmetric):
 #'   - tau_a: Kendall's tau-a (no tie correction)
@@ -48,21 +50,6 @@
 #' For multiple predictors, `X` should be a matrix with predictors in columns.
 #' The returned `estimate` vector follows the column order of `X`.
 #'
-#' \subsection{Handling floating-point ties in Y}{
-#' With \code{aeq_y = FALSE} (default), two \code{Y} values count as equal only
-#' if they are exactly equal as stored \code{double}s (R does not merge values
-#' that differ only by tiny rounding error). With \code{aeq_y = TRUE}, nearly-equal \code{Y} are merged
-#' before computation (default tolerance \code{sqrt(.Machine$double.eps)}),
-#' aligned with the floating-point tie fix in \code{survival::concordance()};
-#' override via \code{options(acor.aeq_y_tolerance = )}. Only \code{Y} is
-#' adjusted, not \code{X}.
-#' }
-#'
-#' @param aeq_y Logical. If \code{TRUE}, merge nearly-equal \code{Y} before
-#'   computation (default tolerance \code{sqrt(.Machine$double.eps)}), aligned
-#'   with \code{survival::concordance()}; if \code{FALSE}, exact equality on
-#'   stored values. Override tolerance with \code{options(acor.aeq_y_tolerance = )}.
-#'   See Details.
 #' @examples
 #' # Single predictor
 #' x <- rnorm(100)
@@ -80,30 +67,14 @@ acor <- function(X, Y, method = c("pearson", "akc", "agc", "cid", "cma",
                                   "tau_a", "tau_b",
                                   "gamma",
                                   "rho_a", "rho_b"
-                                  ),
-                 aeq_y = FALSE) {
+                                  )) {
   method <- match.arg(method)
   
   validated <- validate_acor_inputs(X, Y)
   X <- validated$X
-  Y_orig <- validated$Y
+  Y <- validated$Y
   m <- validated$m
 
-  Y <- Y_orig
-  if (isTRUE(aeq_y)) {
-    tol <- getOption("acor.aeq_y_tolerance", NULL)
-    if (is.null(tol)) {
-      tol <- sqrt(.Machine$double.eps)
-    }
-    if (!is.numeric(tol) || length(tol) != 1L || !is.finite(tol) || tol <= 0) {
-      stop("Option 'acor.aeq_y_tolerance' must be NULL or one positive finite number")
-    }
-    Y <- bucket_y_aeq_style(Y_orig, tol)
-    if (length(unique(Y)) < 2L) {
-      stop("After aeq-style Y collapsing, Y has fewer than 2 distinct values; ",
-           "use aeq_y = FALSE or a smaller tolerance via options(acor.aeq_y_tolerance = )")
-    }
-  }
   # Pre-compute Y ranks once for methods that need them
   y_ranks <- NULL
   rank_methods <- c("agc", "cma", "rho_a", "rho_b")
@@ -165,21 +136,12 @@ print.acor <- function(x, ...) {
 #' @param variance Character string specifying the variance estimation method:
 #'   * `"ij"` (default): infinitesimal jackknife variance (supported for
 #'     `"akc"`, `"agc"`, `"cid"`, `"cma"`, `"tau_b"`, `"gamma"`, and `"rho_b"`).
-#'   * `"plugin"`: plug-in asymptotic variance (closed-form / kernel estimators,
-#'     including delta-method expressions where used); use this for methods
-#'     without an IJ implementation (e.g. \code{"pearson"}, \code{"tau_a"},
-#'     \code{"rho_a"}) or to match the older default behaviour.
+#'   * `"plugin"`: plug-in asymptotic variance
 #'
 #'   When \code{variance = "ij"} and \code{IID = FALSE}, the Bartlett-kernel HAC
 #'   estimator is applied to the IJ influence function values.
 #'   The independence variance uses the same closed-form formula regardless
-#'   of the variance method. The name \code{"delta"} is accepted as a
-#'   deprecated synonym for \code{"plugin"}.
-#' @param aeq_y Logical. If \code{TRUE}, merge nearly-equal \code{Y} before
-#'   computation (default tolerance \code{sqrt(.Machine$double.eps)}), aligned
-#'   with \code{survival::concordance()}; if \code{FALSE}, exact equality on
-#'   stored values. Override tolerance with \code{options(acor.aeq_y_tolerance = )}.
-#'   See Details.
+#'   of the variance method.
 #' 
 #' @return An object of class `"acor_htest"`. For a single predictor, the
 #'   result also inherits from `"htest"` and contains the estimate, its
@@ -217,16 +179,8 @@ print.acor <- function(x, ...) {
 #' - AKC, AGC: H0: correlation = 0
 #' - CID, CMA: H0: correlation = 0.5
 #'
-#' \subsection{Handling floating-point ties in Y}{
-#' With \code{aeq_y = FALSE} (default), two \code{Y} values count as equal only
-#' if they are exactly equal as stored \code{double}s (R does not merge values
-#' that differ only by tiny rounding error). With \code{aeq_y = TRUE}, nearly-equal \code{Y} are merged
-#' before computation (default tolerance \code{sqrt(.Machine$double.eps)}),
-#' aligned with the floating-point tie fix in \code{survival::concordance()};
-#' override via \code{options(acor.aeq_y_tolerance = )}. Only \code{Y} is
-#' adjusted, not \code{X}. Kernel choice uses the original \code{Y}:
-#' \code{select_kernel_version()} ignores collapsing.
-#' }
+#' For `method = "cid"`, compare to `survival::concordance(Y ~ x, timefix = FALSE)`
+#' (exact Y ties; survival's default merges nearly-equal `Y`).
 #'
 #' @examples
 #' # Test if AKC differs from 0 (independence test)
@@ -270,17 +224,11 @@ acor.test <- function(X, Y,
                       conf.level = 0.95,
                       fisher = FALSE, 
                       IID = TRUE,
-                      variance = c("ij", "plugin"),
-                      aeq_y = FALSE) {
+                      variance = c("ij", "plugin")) {
   
   dname <- paste(deparse(substitute(X)), "and", deparse(substitute(Y)))
   method <- match.arg(method)
   alternative <- match.arg(alternative)
-  if (is.character(variance) && length(variance) == 1L && !is.na(variance) &&
-      variance == "delta") {
-    .Deprecated(msg = "variance = \"delta\" is deprecated; use variance = \"plugin\".")
-    variance <- "plugin"
-  }
   variance_method <- match.arg(variance, c("ij", "plugin"))
   if (!is.numeric(conf.level) || length(conf.level) != 1 || is.na(conf.level) ||
       conf.level <= 0 || conf.level >= 1) {
@@ -289,27 +237,11 @@ acor.test <- function(X, Y,
 
   validated <- validate_acor_inputs(X, Y)
   X <- validated$X
-  Y_orig <- validated$Y
+  Y <- validated$Y
   n <- validated$n
   m <- validated$m
   if (n < 3) {
     stop("At least 3 observations are required")
-  }
-
-  Y <- Y_orig
-  if (isTRUE(aeq_y)) {
-    tol <- getOption("acor.aeq_y_tolerance", NULL)
-    if (is.null(tol)) {
-      tol <- sqrt(.Machine$double.eps)
-    }
-    if (!is.numeric(tol) || length(tol) != 1L || !is.finite(tol) || tol <= 0) {
-      stop("Option 'acor.aeq_y_tolerance' must be NULL or one positive finite number")
-    }
-    Y <- bucket_y_aeq_style(Y_orig, tol)
-    if (length(unique(Y)) < 2L) {
-      stop("After aeq-style Y collapsing, Y has fewer than 2 distinct values; ",
-           "use aeq_y = FALSE or a smaller tolerance via options(acor.aeq_y_tolerance = )")
-    }
   }
   
   if (variance_method == "ij") {
@@ -348,11 +280,11 @@ acor.test <- function(X, Y,
   # Compute estimates and variance based on method
   if (method %in% c("akc", "cid")) {
     if (variance_method == "ij") {
-      # Coefficient (point estimate) uses U-statistic p_Y inside akc_ij_cpp.
-      # Independence variance follows the package convention: plug-in p_Y.
-      p_Y <- compute_tau_Y(Y)$p_tie_y
+      # Default IJ: akc_ij_cpp (sample-ratio).
+      tau_Y_result <- compute_tau_Y(Y)
+      p_Y <- tau_Y_result$p_tie_y
       p_Y_plugin <- ((n - 1) / n) * p_Y + 1 / n
-      
+
       if (m == 1) {
         result <- akc_ij_cpp(X[, 1], Y)
         akc_vals <- result$akc
@@ -382,13 +314,13 @@ acor.test <- function(X, Y,
       }
     } else {
       if (m == 1) {
-        version <- select_kernel_version(Y_orig, X)
+        version <- select_kernel_version(Y, X)
         result <- compute_akc_variance_auto(X[, 1], Y, IID = IID, version = version)
         akc_vals <- result$akc
         Sigma_akc <- result$var
         Sigma_akc_ind <- result$var_ind
       } else {
-        version <- select_kernel_version(Y_orig, X)
+        version <- select_kernel_version(Y, X)
         result <- compute_akc_multivariate_variance_auto(X, Y, IID = IID, version = version)
         akc_vals <- result$akc_vector
         Sigma_akc <- result$Sigma
@@ -406,7 +338,7 @@ acor.test <- function(X, Y,
       variance_ind <- Sigma_akc_ind
     }
   } else if (method == "tau_a") {
-    version <- select_kernel_version(Y_orig, X)
+    version <- select_kernel_version(Y, X)
     
     if (m == 1) {
       result <- compute_tau_a_variance(X[, 1], Y, IID = IID, version = version)
@@ -448,7 +380,7 @@ acor.test <- function(X, Y,
         }
       }
     } else {
-      version <- select_kernel_version(Y_orig, X)
+      version <- select_kernel_version(Y, X)
       if (m == 1) {
         result <- compute_tau_b_variance(X[, 1], Y, IID = IID, version = version)
         estimates <- result$tau_b
@@ -493,7 +425,7 @@ acor.test <- function(X, Y,
         }
       }
     } else {
-      version <- select_kernel_version(Y_orig, X)
+      version <- select_kernel_version(Y, X)
       if (m == 1) {
         result <- compute_gamma_variance(X[, 1], Y, IID = IID, version = version)
         estimates <- result$gamma
@@ -580,21 +512,22 @@ acor.test <- function(X, Y,
   } else {
     
     if (variance_method == "ij") {
-      y_ij_rank <- rank(Y, ties.method = "average")
-      pre_ij <- agc_y_preamble(y_ij_rank)
+      # Reuse the y_ranks / x_ranks / xarray_ranks pre-computed at the top of
+      # acor.test (for method %in% c("agc", "cma", "rho_a")) -- avoid extra
+      # rank() passes that were previously costing ~2 ms at n=5000.
+      pre_ij <- agc_y_preamble(y_ranks)
       b_ij <- floor(2 * n^(1 / 3))
-      
+
       if (m == 1) {
         result <- agc_ij_cpp(X[, 1], Y)
         agc_vals <- result$agc
         ic <- result$ic
-        x_ij_rank <- rank(X[, 1], ties.method = "average")
         if (IID) {
           Sigma_agc <- result$var_ij
-          Sigma_agc_ind <- ind_variance_agc_iid(x_ij_rank, pre_ij$N, pre_ij$zeta_3Y)
+          Sigma_agc_ind <- ind_variance_agc_iid(x_ranks, pre_ij$N, pre_ij$zeta_3Y)
         } else {
           Sigma_agc <- hac_variance_univariate(ic, scale_factor = 1)
-          Sigma_agc_ind <- ind_variance_agc_hac(x_ij_rank, y_ij_rank,
+          Sigma_agc_ind <- ind_variance_agc_hac(x_ranks, y_ranks,
                                                 pre_ij$N, pre_ij$zeta_3Y, b_ij)
         }
       } else {
@@ -605,16 +538,12 @@ acor.test <- function(X, Y,
           agc_vals[k] <- res_k$agc
           IC_mat[, k] <- res_k$ic
         }
-        xarray_ij_ranks <- matrix(0, nrow = m, ncol = n)
-        for (k in seq_len(m)) {
-          xarray_ij_ranks[k, ] <- rank(X[, k], ties.method = "average")
-        }
         if (IID) {
           Sigma_agc <- crossprod(IC_mat) / n
-          Sigma_agc_ind <- ind_covariance_agc_iid(xarray_ij_ranks, pre_ij$N, pre_ij$zeta_3Y)
+          Sigma_agc_ind <- ind_covariance_agc_iid(xarray_ranks, pre_ij$N, pre_ij$zeta_3Y)
         } else {
           Sigma_agc <- hac_covariance_multivariate(IC_mat, scale_factor = 1)
-          Sigma_agc_ind <- ind_covariance_agc_hac(xarray_ij_ranks, y_ij_rank,
+          Sigma_agc_ind <- ind_covariance_agc_hac(xarray_ranks, y_ranks,
                                                   pre_ij$N, pre_ij$zeta_3Y, b_ij)
         }
       }

@@ -106,6 +106,16 @@ ind_variance_tau_a_hac <- function(X, Y) {
   64 * ind_lrv_univariate(x_grade, y_grade, N, b)
 }
 
+#' K_tau for variance with plug-in tau (one \code{H_bar} pass). Coefficient unchanged.
+#' @keywords internal
+#' @noRd
+k_tau_vec_plugin <- function(X, Y, version = c("v1", "v2")) {
+  version <- match.arg(version)
+  H_bar <- if (version == "v1") H_bar_vec_v1(X, Y) else H_bar_vec_v2_cpp(X, Y)
+  tau_plug <- tau_plugin_from_H_bar(H_bar)
+  K_tau_from_H_bar(H_bar, X, Y, tau_plug)
+}
+
 #' Compute tau-a with variance
 #' @param X Numeric predictor vector.
 #' @param Y Numeric outcome vector.
@@ -115,11 +125,9 @@ ind_variance_tau_a_hac <- function(X, Y) {
 #' @keywords internal
 #' @noRd
 compute_tau_a_variance <- function(X, Y, IID = TRUE, version = "v2") {
-  tau_result <- compute_kendall(X, Y)
-  tau_XY <- tau_result$expectation
+  tau_XY <- compute_kendall(X, Y)$expectation
   
-  K_tau_fn <- if (version == "v1") K_tau_vec_v1 else K_tau_vec_v2
-  K_tau_values <- K_tau_fn(X, Y, tau_XY)
+  K_tau_values <- k_tau_vec_plugin(X, Y, version)
   
   var_iid <- 4 * mean(K_tau_values^2)
   
@@ -147,15 +155,12 @@ compute_tau_a_multivariate_variance <- function(X, Y, IID = TRUE, version = "v2"
   n <- length(Y)
   m <- ncol(X)
   
-  K_tau_fn <- if (version == "v1") K_tau_vec_v1 else K_tau_vec_v2
-  
   tau_vector <- numeric(m)
   K_tau_matrix <- matrix(0, nrow = n, ncol = m)
   
   for (k in seq_len(m)) {
-    tau_result <- compute_kendall(X[, k], Y)
-    tau_vector[k] <- tau_result$expectation
-    K_tau_matrix[, k] <- K_tau_fn(X[, k], Y, tau_vector[k])
+    tau_vector[k] <- compute_kendall(X[, k], Y)$expectation
+    K_tau_matrix[, k] <- k_tau_vec_plugin(X[, k], Y, version)
   }
   
   if (IID) {
@@ -234,11 +239,11 @@ tau_b_hac_cross_lrv <- function(k1, k2, N, b) {
 
 #' Delta-method gradient for tau_b = tau / sqrt(sx * sy)
 #'
-#' Matches \code{kendall_tau_b}: \code{sx}, \code{sy} are \code{tau_self} margins
-#' (\eqn{\widehat{\tau}(X,X)}, \eqn{\widehat{\tau}(Y,Y)} in the pair-tie sense).
+#' Variance path: evaluate at plug-in \eqn{\tau} (from \code{H_bar}) and plug-in
+#' margins \code{denom_ind = 1 - sum(p^2)}. Point estimate uses U-stat margins.
 #'
-#' @param tau Kendall tau-a expectation \eqn{\tau(X,Y)} (plug-in).
-#' @param sx,sy Marginal \code{tau_self} values.
+#' @param tau Plug-in Kendall tau \eqn{\tau_{\mathrm{plug}}(X,Y)} for variance.
+#' @param sx,sy Plug-in marginal tie denominators (\code{denom_ind}).
 #' @return Length-3 vector \eqn{(\partial h/\partial\tau, \partial h/\partial s_x,
 #'   \partial h/\partial s_y)} for \eqn{h = \tau/\sqrt{s_x s_y}}.
 #' @keywords internal
@@ -309,8 +314,6 @@ ind_variance_tau_b_univariate <- function(X, Y, IID = TRUE) {
 #' @noRd
 compute_tau_b_variance <- function(X, Y, IID = TRUE, version = "v2") {
   N <- length(Y)
-  tau_result <- compute_kendall(X, Y)
-  tau <- tau_result$expectation
   tau_b <- kendall_tau_b(X, Y)
 
   pre_x <- tau_b_tie_preamble(X)
@@ -318,12 +321,13 @@ compute_tau_b_variance <- function(X, Y, IID = TRUE, version = "v2") {
   sx <- pre_x$denom_ind
   sy <- pre_y$denom_ind
 
-  K_tau_fn <- if (version == "v1") K_tau_vec_v1 else K_tau_vec_v2
-  k_tau <- K_tau_fn(X, Y, tau)
+  H_bar <- if (version == "v1") H_bar_vec_v1(X, Y) else H_bar_vec_v2_cpp(X, Y)
+  tau_plug <- tau_plugin_from_H_bar(H_bar)
+  k_tau <- K_tau_from_H_bar(H_bar, X, Y, tau_plug)
   k_tau_x <- pre_x$k_self
   k_tau_y <- pre_y$k_self
 
-  grad <- tau_b_gradient(tau, sx, sy)
+  grad <- tau_b_gradient(tau_plug, sx, sy)
 
   if (IID) {
     S <- tau_b_iid_covariance(k_tau, k_tau_x, k_tau_y)
@@ -428,22 +432,23 @@ compute_tau_b_multivariate_variance <- function(X, Y, IID = TRUE, version = "v2"
   n <- nrow(X)
   m <- ncol(X)
 
-  K_tau_fn <- if (version == "v1") K_tau_vec_v1 else K_tau_vec_v2
+  H_bar_fn <- if (version == "v1") H_bar_vec_v1 else H_bar_vec_v2_cpp
 
   pre_y <- tau_b_tie_preamble(Y)
   sy <- pre_y$denom_ind
   ky <- pre_y$k_self
 
-  tau_vec <- numeric(m)
+  tau_plug_vec <- numeric(m)
   sx_vec <- numeric(m)
   Psi <- matrix(0, nrow = n, ncol = 2 * m + 1)
 
   for (k in seq_len(m)) {
-    tau_result <- compute_kendall(X[, k], Y)
-    tau_vec[k] <- tau_result$expectation
-    pre_x <- tau_b_tie_preamble(X[, k])
+    X_k <- X[, k]
+    H_bar <- H_bar_fn(X_k, Y)
+    tau_plug_vec[k] <- tau_plugin_from_H_bar(H_bar)
+    pre_x <- tau_b_tie_preamble(X_k)
     sx_vec[k] <- pre_x$denom_ind
-    Psi[, 2 * k - 1] <- 2 * K_tau_fn(X[, k], Y, tau_vec[k])
+    Psi[, 2 * k - 1] <- 2 * K_tau_from_H_bar(H_bar, X_k, Y, tau_plug_vec[k])
     Psi[, 2 * k] <- 2 * pre_x$k_self
   }
   Psi[, 2 * m + 1] <- 2 * ky
@@ -456,7 +461,7 @@ compute_tau_b_multivariate_variance <- function(X, Y, IID = TRUE, version = "v2"
 
   J <- matrix(0, nrow = m, ncol = 2 * m + 1)
   for (k in seq_len(m)) {
-    g <- tau_b_gradient(tau_vec[k], sx_vec[k], sy)
+    g <- tau_b_gradient(tau_plug_vec[k], sx_vec[k], sy)
     J[k, 2 * (k - 1) + 1] <- g[1]
     J[k, 2 * k] <- g[2]
     J[k, 2 * m + 1] <- g[3]
@@ -585,20 +590,26 @@ ind_covariance_gamma_hac <- function(X, Y) {
 
 
 #' Compute gamma with variance
+#'
+#' Point estimate is pair-based \code{goodman_kruskal_gamma()}. Variance uses
+#' plug-in \eqn{\tau_{\mathrm{plug}} = 4\,\mathrm{mean}(\bar H) - 1} in \code{K_tau}
+#' and \code{gamma_scale}, with plug-in \code{nu} / \code{k_nu} from
+#' \code{gamma_tie_preamble()} (package convention: U-stat coefficient, plug-in
+#' variance).
+#'
 #' @keywords internal
 #' @noRd
 compute_gamma_variance <- function(X, Y, IID = TRUE, version = "v2") {
   N <- length(Y)
-  tau_result <- compute_kendall(X, Y)
-  tau <- tau_result$expectation
   gamma_val <- goodman_kruskal_gamma(X, Y)
   tie_pre <- gamma_tie_preamble(X, Y)
 
   D <- 1 - tie_pre$nu
-  gamma_scale <- tau / D
+  H_bar <- if (version == "v1") H_bar_vec_v1(X, Y) else H_bar_vec_v2_cpp(X, Y)
+  tau_plug <- tau_plugin_from_H_bar(H_bar)
+  gamma_scale <- tau_plug / D
 
-  K_tau_fn <- if (version == "v1") K_tau_vec_v1 else K_tau_vec_v2
-  k_tau <- K_tau_fn(X, Y, tau)
+  k_tau <- K_tau_from_H_bar(H_bar, X, Y, tau_plug)
   k_nu <- tie_pre$k_nu
 
   if (IID) {
@@ -641,21 +652,22 @@ compute_gamma_multivariate_variance <- function(X, Y, IID = TRUE, version = "v2"
   N <- length(Y)
   m <- ncol(X)
 
-  K_tau_fn <- if (version == "v1") K_tau_vec_v1 else K_tau_vec_v2
+  H_bar_fn <- if (version == "v1") H_bar_vec_v1 else H_bar_vec_v2_cpp
 
   gamma_vector <- numeric(m)
   IC_matrix <- matrix(0, nrow = N, ncol = m)
 
   for (k in seq_len(m)) {
-    tau_result <- compute_kendall(X[, k], Y)
-    tau_k <- tau_result$expectation
-    gamma_vector[k] <- goodman_kruskal_gamma(X[, k], Y)
+    X_k <- X[, k]
+    gamma_vector[k] <- goodman_kruskal_gamma(X_k, Y)
 
-    tie_pre_k <- gamma_tie_preamble(X[, k], Y)
+    tie_pre_k <- gamma_tie_preamble(X_k, Y)
     D_k <- 1 - tie_pre_k$nu
-    gamma_scale_k <- tau_k / D_k
+    H_bar <- H_bar_fn(X_k, Y)
+    tau_plug_k <- tau_plugin_from_H_bar(H_bar)
+    gamma_scale_k <- tau_plug_k / D_k
 
-    k_tau_k <- K_tau_fn(X[, k], Y, tau_k)
+    k_tau_k <- K_tau_from_H_bar(H_bar, X_k, Y, tau_plug_k)
     k_nu_k <- tie_pre_k$k_nu
 
     IC_matrix[, k] <- 2 * (k_tau_k + gamma_scale_k * k_nu_k) / D_k

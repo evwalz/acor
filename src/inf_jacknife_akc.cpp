@@ -50,7 +50,9 @@ using namespace Rcpp;
 
 
 // ============================================================================
-  // akc_ij_cpp
+  // akc_ij_cpp -- default AKC IJ (sample-ratio chain rule)
+//
+  // Used by acor.test(variance = "ij").
 //
   // Computes AKC point estimate, IJ influence function values, and IJ variance.
 //

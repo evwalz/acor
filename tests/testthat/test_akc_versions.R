@@ -515,7 +515,7 @@ run_acor_benchmarks <- function(reps = 5) {
         pROC::var(roc_obj)
       }, reps)
     } else {
-      t_ref <- time_med(function() survival::concordance(Y ~ X), reps)
+      t_ref <- time_med(function() survival::concordance(Y ~ X, timefix = FALSE), reps)
     }
     
     ref_str <- if (is.na(t_ref)) "     N/A" else sprintf("%8.4f", t_ref)

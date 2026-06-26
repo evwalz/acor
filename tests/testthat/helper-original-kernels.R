@@ -41,6 +41,15 @@ K_p <- function(y, Y, tau_y) {
   tau_y - p_y_neq_y
 }
 
+#' Plug-in tau from pointwise mid-bivariate CDF (matches optimized AKC variance path).
+#' @keywords internal
+#' @noRd
+tau_plugin_pointwise <- function(X, Y) {
+  n <- length(Y)
+  H_all <- vapply(seq_len(n), function(i) H_bar(X[i], Y[i], X, Y), numeric(1))
+  4 * mean(H_all) - 1
+}
+
 #' @keywords internal
 #' @noRd
 kernel_expectation <- function(X, Y, tau_XY, tau_y, p_Y) {
@@ -81,10 +90,10 @@ Sigma_akc <- function(X, Y) {
   
   akc_result <- compute_kendall(X, Y)
   akc    <- akc_result$tau
-  tau_XY <- akc_result$expectation
+  tau_plug <- tau_plugin_pointwise(X, Y)
   
   scale_factor <- 4 / (1 - p_Y_plugin)^2
-  expected_val <- kernel_expectation(X, Y, tau_XY, tau_Y_plugin, p_Y_plugin)
+  expected_val <- kernel_expectation(X, Y, tau_plug, tau_Y_plugin, p_Y_plugin)
   
   list(akc = akc,
        var = scale_factor * expected_val,
@@ -109,18 +118,18 @@ Sigma_akc_ts <- function(X, Y) {
   
   akc_result <- compute_kendall(X, Y)
   akc    <- akc_result$tau
-  tau_XY <- akc_result$expectation
+  tau_plug <- tau_plugin_pointwise(X, Y)
   
   scale_factor <- 4 / (1 - p_Y_plugin)^2
   
   K_tau_values <- numeric(n)
   K_p_values   <- numeric(n)
   for (i in seq_len(n)) {
-    K_tau_values[i] <- K_tau(X[i], Y[i], X, Y, tau_XY)
+    K_tau_values[i] <- K_tau(X[i], Y[i], X, Y, tau_plug)
     K_p_values[i]   <- K_p(Y[i], Y, tau_Y_plugin)
   }
   
-  adjusted_K <- compute_adjusted_K(K_tau_values, K_p_values, tau_XY, p_Y_plugin)
+  adjusted_K <- compute_adjusted_K(K_tau_values, K_p_values, tau_plug, p_Y_plugin)
   
   list(akc = akc,
        var = hac_variance_univariate(adjusted_K, scale_factor),
@@ -152,7 +161,7 @@ Sigma_akc_multivariate <- function(X, Y) {
   tau_Y_plugin <- 1 - p_Y_plugin
   
   akc_vector <- numeric(m)
-  tau_vector <- numeric(m)
+  tau_plug_vector <- numeric(m)
   K_tau_values <- matrix(0, nrow = n, ncol = m)
   K_p_values <- numeric(n)
   
@@ -164,16 +173,17 @@ Sigma_akc_multivariate <- function(X, Y) {
     X_k <- X[, k]
     akc_result <- compute_kendall(X_k, Y)
     akc_vector[k] <- akc_result$tau
-    tau_vector[k] <- akc_result$expectation
+    tau_plug_k <- tau_plugin_pointwise(X_k, Y)
+    tau_plug_vector[k] <- tau_plug_k
     
     for (i in seq_len(n)) {
-      K_tau_values[i, k] <- K_tau(X_k[i], Y[i], X_k, Y, tau_vector[k])
+      K_tau_values[i, k] <- K_tau(X_k[i], Y[i], X_k, Y, tau_plug_k)
     }
   }
   
   scale_factor <- 4 / ((1 - p_Y_plugin)^2)
   adjusted_K_tau <- compute_adjusted_K_matrix(K_tau_values, K_p_values,
-                                              tau_vector, p_Y_plugin)
+                                              tau_plug_vector, p_Y_plugin)
   
   Sigma <- matrix(0, nrow = m, ncol = m)
   for (k in seq_len(m)) {
@@ -207,7 +217,7 @@ Sigma_akc_multivariate_ts <- function(X, Y) {
   tau_Y_plugin <- 1 - p_Y_plugin
   
   akc_vector <- numeric(m)
-  tau_vector <- numeric(m)
+  tau_plug_vector <- numeric(m)
   K_tau_values <- matrix(0, nrow = n, ncol = m)
   K_p_values <- numeric(n)
   
@@ -219,16 +229,17 @@ Sigma_akc_multivariate_ts <- function(X, Y) {
     X_k <- X[, k]
     akc_result <- compute_kendall(X_k, Y)
     akc_vector[k] <- akc_result$tau
-    tau_vector[k] <- akc_result$expectation
+    tau_plug_k <- tau_plugin_pointwise(X_k, Y)
+    tau_plug_vector[k] <- tau_plug_k
     
     for (i in seq_len(n)) {
-      K_tau_values[i, k] <- K_tau(X_k[i], Y[i], X_k, Y, tau_vector[k])
+      K_tau_values[i, k] <- K_tau(X_k[i], Y[i], X_k, Y, tau_plug_k)
     }
   }
   
   scale_factor <- 4 / ((1 - p_Y_plugin)^2)
   adjusted_K_tau <- compute_adjusted_K_matrix(K_tau_values, K_p_values,
-                                              tau_vector, p_Y_plugin)
+                                              tau_plug_vector, p_Y_plugin)
   
   # Element-wise HAC covariance (for original kernel compatibility)
   b <- floor(2 * n^(1 / 3))

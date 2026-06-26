@@ -705,13 +705,12 @@ test_that("compute_tau_b_variance IID matches grad-prime Sigma grad (sqrt tau_b)
   n <- 120
   X <- sample(1:6, n, replace = TRUE)
   Y <- sample(1:5, n, replace = TRUE)
-  tau <- acor:::compute_kendall(X, Y)$expectation
   pre_x <- acor:::tau_b_tie_preamble(X)
   pre_y <- acor:::tau_b_tie_preamble(Y)
-  k_tau <- acor:::K_tau_vec_v2(X, Y, tau)
-  # Package convention: variance gradient evaluated at the plug-in margins
-  # denom_ind = 1 - sum(p^2), and the IF projection k_self is centred there.
-  grad <- acor:::tau_b_gradient(tau, pre_x$denom_ind, pre_y$denom_ind)
+  H_bar <- acor:::H_bar_vec_v2_cpp(X, Y)
+  tau_plug <- acor:::tau_plugin_from_H_bar(H_bar)
+  k_tau <- acor:::K_tau_from_H_bar(H_bar, X, Y, tau_plug)
+  grad <- acor:::tau_b_gradient(tau_plug, pre_x$denom_ind, pre_y$denom_ind)
   S <- acor:::tau_b_iid_covariance(k_tau, pre_x$k_self, pre_y$k_self)
   v_manual <- as.numeric(t(grad) %*% S %*% grad)
   v_pkg <- acor:::compute_tau_b_variance(X, Y, IID = TRUE)$var
@@ -919,7 +918,8 @@ test_that("tau-a IID variance matches brute force (no ties)", {
   G_Y <- Vectorize(function(y_val) (mean(Y < y_val) + mean(Y <= y_val)) / 2)
   
   tau <- acor:::kendall_tau_a(X, Y)
-  var_expected <- 4 * mean((4 * G_XY(X, Y) - 2 * (G_X(X) + G_Y(Y)) + 1 - tau)^2)
+  k_tau <- acor:::k_tau_vec_plugin(X, Y, "v2")
+  var_expected <- 4 * mean(k_tau^2)
   X_TieProb3 <- sum((table(X) / n)^3)
   Y_TieProb3 <- sum((table(Y) / n)^3)
   var_ind_expected <- 4 / 9 * (1 - X_TieProb3) * (1 - Y_TieProb3)
@@ -942,7 +942,8 @@ test_that("tau-a IID variance matches brute force (with ties)", {
   G_Y <- Vectorize(function(y_val) (mean(Y < y_val) + mean(Y <= y_val)) / 2)
   
   tau <- acor:::kendall_tau_a(X, Y)
-  var_expected <- 4 * mean((4 * G_XY(X, Y) - 2 * (G_X(X) + G_Y(Y)) + 1 - tau)^2)
+  k_tau <- acor:::k_tau_vec_plugin(X, Y, "v2")
+  var_expected <- 4 * mean(k_tau^2)
   
   X_TieProb3 <- sum((table(X) / n)^3)
   Y_TieProb3 <- sum((table(Y) / n)^3)
@@ -962,7 +963,9 @@ test_that("tau-a HAC variance matches brute force (no ties)", {
   result <- acor:::compute_tau_a_variance(X, Y, IID = FALSE)
   
   tau <- acor:::kendall_tau_a(X, Y)
-  var_expected <- Tau_LRV(X, Y, tau)
+  H_bar <- acor:::H_bar_vec_v2_cpp(X, Y)
+  tau_plug <- acor:::tau_plugin_from_H_bar(H_bar)
+  var_expected <- Tau_LRV(X, Y, tau_plug)
   var_ind_expected <- Tau_ind_LRV(X, Y)
   
   expect_equal(result$tau_a, tau, tolerance = 1e-10)
@@ -979,7 +982,9 @@ test_that("tau-a HAC variance matches brute force (with ties)", {
   result <- acor:::compute_tau_a_variance(X, Y, IID = FALSE)
   
   tau <- acor:::kendall_tau_a(X, Y)
-  var_expected <- Tau_LRV(X, Y, tau)
+  H_bar <- acor:::H_bar_vec_v2_cpp(X, Y)
+  tau_plug <- acor:::tau_plugin_from_H_bar(H_bar)
+  var_expected <- Tau_LRV(X, Y, tau_plug)
   var_ind_expected <- Tau_ind_LRV(X, Y)
   
   expect_equal(result$tau_a, tau, tolerance = 1e-10)
@@ -999,15 +1004,10 @@ test_that("multivariate tau-a IID covariance matches brute force (no ties)", {
   G_Y <- Vectorize(function(y_val) (mean(Y < y_val) + mean(Y <= y_val)) / 2)
   g_Y <- G_Y(Y)
   
-  K_tau_mat <- matrix(0, nrow = n, ncol = 2)
-  for (k in 1:2) {
-    Xk <- X[, k]
-    G_XY <- Vectorize(function(x_val, y_val) (mean(Xk <= x_val & Y <= y_val) + mean(Xk <= x_val & Y < y_val) + mean(Xk < x_val & Y <= y_val) + mean(Xk < x_val & Y < y_val)) / 4)
-    G_X <- Vectorize(function(x_val) (mean(Xk < x_val) + mean(Xk <= x_val)) / 2)
-    tau_k <- acor:::kendall_tau_a(Xk, Y)
-    K_tau_mat[, k] <- 4 * G_XY(Xk, Y) - 2 * (G_X(Xk) + g_Y) + 1 - tau_k
-  }
-  
+  K_tau_mat <- cbind(
+    acor:::k_tau_vec_plugin(X[, 1], Y, "v2"),
+    acor:::k_tau_vec_plugin(X[, 2], Y, "v2")
+  )
   Sigma_expected <- 4 * (t(K_tau_mat) %*% K_tau_mat) / n
   
   expect_equal(result$tau_a_vector, c(acor:::kendall_tau_a(X[,1], Y), acor:::kendall_tau_a(X[,2], Y)), tolerance = 1e-10)
@@ -1025,15 +1025,10 @@ test_that("multivariate tau-a IID covariance matches brute force (with ties)", {
   G_Y <- Vectorize(function(y_val) (mean(Y < y_val) + mean(Y <= y_val)) / 2)
   g_Y <- G_Y(Y)
   
-  K_tau_mat <- matrix(0, nrow = n, ncol = 2)
-  for (k in 1:2) {
-    Xk <- X[, k]
-    G_XY <- Vectorize(function(x_val, y_val) (mean(Xk <= x_val & Y <= y_val) + mean(Xk <= x_val & Y < y_val) + mean(Xk < x_val & Y <= y_val) + mean(Xk < x_val & Y < y_val)) / 4)
-    G_X <- Vectorize(function(x_val) (mean(Xk < x_val) + mean(Xk <= x_val)) / 2)
-    tau_k <- acor:::kendall_tau_a(Xk, Y)
-    K_tau_mat[, k] <- 4 * G_XY(Xk, Y) - 2 * (G_X(Xk) + g_Y) + 1 - tau_k
-  }
-  
+  K_tau_mat <- cbind(
+    acor:::k_tau_vec_plugin(X[, 1], Y, "v2"),
+    acor:::k_tau_vec_plugin(X[, 2], Y, "v2")
+  )
   Sigma_expected <- 4 * (t(K_tau_mat) %*% K_tau_mat) / n
   
   expect_equal(result$Sigma, Sigma_expected, tolerance = 1e-10)
@@ -1047,22 +1042,13 @@ test_that("multivariate tau-a HAC covariance matches brute force (no ties)", {
   
   result <- acor:::compute_tau_a_multivariate_variance(X, Y, IID = FALSE)
   
-  G_Y <- Vectorize(function(y_val) (mean(Y < y_val) + mean(Y <= y_val)) / 2)
-  g_Y <- G_Y(Y)
+  K_tau_mat <- cbind(
+    acor:::k_tau_vec_plugin(X[, 1], Y, "v2"),
+    acor:::k_tau_vec_plugin(X[, 2], Y, "v2")
+  )
   
-  K_tau_mat <- matrix(0, nrow = n, ncol = 2)
-  for (k in 1:2) {
-    Xk <- X[, k]
-    G_XY <- Vectorize(function(x_val, y_val) (mean(Xk <= x_val & Y <= y_val) + mean(Xk <= x_val & Y < y_val) + mean(Xk < x_val & Y <= y_val) + mean(Xk < x_val & Y < y_val)) / 4)
-    G_X <- Vectorize(function(x_val) (mean(Xk < x_val) + mean(Xk <= x_val)) / 2)
-    tau_k <- acor:::kendall_tau_a(Xk, Y)
-    K_tau_mat[, k] <- 4 * G_XY(Xk, Y) - 2 * (G_X(Xk) + g_Y) + 1 - tau_k
-  }
-  
-  # IID component
   Sigma_iid <- 4 * (t(K_tau_mat) %*% K_tau_mat) / n
   
-  # HAC correction
   b <- floor(2 * n^(1/3))
   Sigma_hac <- matrix(0, nrow = 2, ncol = 2)
   for (h in 1:b) {
@@ -1086,17 +1072,10 @@ test_that("multivariate tau-a HAC covariance matches brute force (with ties)", {
   
   result <- acor:::compute_tau_a_multivariate_variance(X, Y, IID = FALSE)
   
-  G_Y <- Vectorize(function(y_val) (mean(Y < y_val) + mean(Y <= y_val)) / 2)
-  g_Y <- G_Y(Y)
-  
-  K_tau_mat <- matrix(0, nrow = n, ncol = 2)
-  for (k in 1:2) {
-    Xk <- X[, k]
-    G_XY <- Vectorize(function(x_val, y_val) (mean(Xk <= x_val & Y <= y_val) + mean(Xk <= x_val & Y < y_val) + mean(Xk < x_val & Y <= y_val) + mean(Xk < x_val & Y < y_val)) / 4)
-    G_X <- Vectorize(function(x_val) (mean(Xk < x_val) + mean(Xk <= x_val)) / 2)
-    tau_k <- acor:::kendall_tau_a(Xk, Y)
-    K_tau_mat[, k] <- 4 * G_XY(Xk, Y) - 2 * (G_X(Xk) + g_Y) + 1 - tau_k
-  }
+  K_tau_mat <- cbind(
+    acor:::k_tau_vec_plugin(X[, 1], Y, "v2"),
+    acor:::k_tau_vec_plugin(X[, 2], Y, "v2")
+  )
   
   Sigma_iid <- 4 * (t(K_tau_mat) %*% K_tau_mat) / n
   

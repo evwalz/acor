@@ -13,8 +13,7 @@ acor.test(
   conf.level = 0.95,
   fisher = FALSE,
   IID = TRUE,
-  variance = c("ij", "plugin"),
-  aeq_y = FALSE
+  variance = c("ij", "plugin")
 )
 }
 \arguments{
@@ -47,23 +46,13 @@ assumptions and a HAC variance estimator is used.}
 \itemize{
 \item \code{"ij"} (default): infinitesimal jackknife variance (supported for
 \code{"akc"}, \code{"agc"}, \code{"cid"}, \code{"cma"}, \code{"tau_b"}, \code{"gamma"}, and \code{"rho_b"}).
-\item \code{"plugin"}: plug-in asymptotic variance (closed-form / kernel estimators,
-including delta-method expressions where used); use this for methods
-without an IJ implementation (e.g. \code{"pearson"}, \code{"tau_a"},
-\code{"rho_a"}) or to match the older default behaviour.
+\item \code{"plugin"}: plug-in asymptotic variance
 }
 
 When \code{variance = "ij"} and \code{IID = FALSE}, the Bartlett-kernel HAC
 estimator is applied to the IJ influence function values.
 The independence variance uses the same closed-form formula regardless
-of the variance method. The name \code{"delta"} is accepted as a
-deprecated synonym for \code{"plugin"}.}
-
-\item{aeq_y}{Logical. If \code{TRUE}, merge nearly-equal \code{Y} before
-computation (default tolerance \code{sqrt(.Machine$double.eps)}), aligned
-with \code{survival::concordance()}; if \code{FALSE}, exact equality on
-stored values. Override tolerance with \code{options(acor.aeq_y_tolerance = )}.
-See Details.}
+of the variance method.}
 }
 \value{
 An object of class \code{"acor_htest"}. For a single predictor, the
@@ -106,16 +95,8 @@ Independence null values:
 \item CID, CMA: H0: correlation = 0.5
 }
 
-\subsection{Handling floating-point ties in Y}{
-With \code{aeq_y = FALSE} (default), two \code{Y} values count as equal only
-if they are exactly equal as stored \code{double}s (R does not merge values
-that differ only by tiny rounding error). With \code{aeq_y = TRUE}, nearly-equal \code{Y} are merged
-before computation (default tolerance \code{sqrt(.Machine$double.eps)}),
-aligned with the floating-point tie fix in \code{survival::concordance()};
-override via \code{options(acor.aeq_y_tolerance = )}. Only \code{Y} is
-adjusted, not \code{X}. Kernel choice uses the original \code{Y}:
-\code{select_kernel_version()} ignores collapsing.
-}
+For \code{method = "cid"}, compare to \code{survival::concordance(Y ~ x, timefix = FALSE)}
+(exact Y ties; survival's default merges nearly-equal \code{Y}).
 }
 \examples{
 # Test if AKC differs from 0 (independence test)

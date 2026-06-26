@@ -678,16 +678,11 @@ test_that("IJ and plugin give identical independence variance for tau_b, gamma, 
   }
 })
 
-test_that("acor.test default variance is plugin; delta is deprecated", {
+test_that("acor.test default variance is ij", {
   set.seed(2013)
   x <- rnorm(40)
   y <- rnorm(40)
   expect_equal(acor.test(x, y, method = "akc")$variance_method, "ij")
-  expect_warning(
-    r <- acor.test(x, y, method = "akc", variance = "delta"),
-    "deprecated"
-  )
-  expect_equal(r$variance_method, "plugin")
 })
 
 test_that("acor.test variance='ij' IID=FALSE runs for tau_b, gamma, rho_b", {

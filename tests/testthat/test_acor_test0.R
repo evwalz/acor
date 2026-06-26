@@ -3,7 +3,7 @@
 # ============================================================================
 # 
 # These tests validate the variance estimators by comparing to:
-# 1. survival::concordance - for CID variance
+# 1. survival::concordance(..., timefix = FALSE) for CID (exact Y ties, as acor)
 # 2. pROC::var (DeLong) - for binary Y (AUC) variance
 # 3. cor.test - for Kendall/Spearman under independence
 #
@@ -30,7 +30,7 @@ test_that("CID variance matches survival::concordance variance (no ties)", {
   result_cid <- acor.test(X, Y, method = "cid")
   
   # survival::concordance
-  conc <- concordance(Y ~ X)
+  conc <- concordance(Y ~ X, timefix = FALSE)
   
   # Compare estimates
   expect_equal(unname(result_cid$estimate), unname(conc$concordance), 
@@ -55,7 +55,7 @@ test_that("CID variance matches survival::concordance variance (with ties in X)"
   Y <- rnorm(n) + rnorm(n, sd = 0.0001)  # No ties in Y
   
   result_cid <- acor.test(X, Y, method = "cid")
-  conc <- concordance(Y ~ X)
+  conc <- concordance(Y ~ X, timefix = FALSE)
   
   # Compare estimates
   expect_equal(unname(result_cid$estimate), unname(conc$concordance), 
@@ -77,7 +77,7 @@ test_that("CID variance matches survival::concordance for discrete X (10 levels)
   Y <- rnorm(n) + rnorm(n, sd = 0.0001)
   
   result_cid <- acor.test(X, Y, method = "cid")
-  conc <- concordance(Y ~ X)
+  conc <- concordance(Y ~ X, timefix = FALSE)
   
   # Compare estimates
   expect_equal(unname(result_cid$estimate), unname(conc$concordance), 
@@ -99,7 +99,7 @@ test_that("CID variance matches survival::concordance for discrete Y (5 levels)"
   Y <- sample(1:5, n, replace = TRUE)
   
   result_cid <- acor.test(X, Y, method = "cid")
-  conc <- concordance(Y ~ X)
+  conc <- concordance(Y ~ X, timefix = FALSE)
   
   # Compare estimates
   expect_equal(unname(result_cid$estimate), unname(conc$concordance), 
@@ -121,7 +121,7 @@ test_that("CID variance matches survival::concordance for discrete X and Y", {
   Y <- sample(1:5, n, replace = TRUE)
   
   result_cid <- acor.test(X, Y, method = "cid")
-  conc <- concordance(Y ~ X)
+  conc <- concordance(Y ~ X, timefix = FALSE)
   
   # Compare estimates
   expect_equal(unname(result_cid$estimate), unname(conc$concordance), 
@@ -164,7 +164,7 @@ test_that("CID variance matches survival::concordance across discrete levels", {
     }
     
     result_cid <- acor.test(X, Y, method = "cid")
-    conc <- concordance(Y ~ X)
+    conc <- concordance(Y ~ X, timefix = FALSE)
     
     # Compare estimates
     expect_equal(unname(result_cid$estimate), unname(conc$concordance), 
@@ -187,7 +187,7 @@ test_that("CID variance matches survival::concordance for binary Y", {
   Y <- rbinom(n, 1, 0.6)
   
   result_cid <- acor.test(X, Y, method = "cid")
-  conc <- concordance(Y ~ X)
+  conc <- concordance(Y ~ X, timefix = FALSE)
   
   # Compare estimates (should be exact for binary Y)
   expect_equal(unname(result_cid$estimate), unname(conc$concordance), 
@@ -211,7 +211,7 @@ test_that("AKC variance matches survival::concordance variance (scaled)", {
   
   result_akc <- acor.test(X, Y, method = "akc")
   result_cid <- acor.test(X, Y, method = "cid")
-  conc <- concordance(Y ~ X)
+  conc <- concordance(Y ~ X, timefix = FALSE)
   
   # AKC variance should be 4x CID variance
   expect_equal(result_akc$variance, 4 * result_cid$variance, 
@@ -494,7 +494,7 @@ test_that("Binary Y: Variance estimates are consistent across methods", {
   result_cma <- acor.test(X, Y, method = "cma")
   result_cid <- acor.test(X, Y, method = "cid")
   
-  conc <- concordance(Y ~ X)
+  conc <- concordance(Y ~ X, timefix = FALSE)
   roc_obj <- pROC::roc(Y, X, direction = '<', quiet = TRUE)
   delong_var <- pROC::var(roc_obj)
   

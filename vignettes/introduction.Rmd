@@ -63,8 +63,11 @@ acor(x, y, method = "pearson")
 
 ## Hypothesis tests
 
-`acor.test()` performs asymptotic inference for `akc`, `agc`, `cid`, `cma`,
-`tau_a`, and `rho_a`.
+`acor.test()` supports all measures listed above. Default variance is
+`variance = "ij"` (infinitesimal jackknife) for `akc`, `agc`, `cid`, `cma`,
+`tau_b`, `gamma`, and `rho_b`; use `variance = "plugin"` for closed-form
+kernels (required for `pearson`, `tau_a`, and `rho_a`, or as an alternative
+where IJ is available).
 
 ```{r}
 set.seed(2)
@@ -72,6 +75,8 @@ x <- rnorm(120)
 y <- 0.5 * x + rnorm(120)
 
 acor.test(x, y, method = "akc")
+acor.test(x, y, method = "tau_b")
+acor.test(x, y, method = "pearson", variance = "plugin")
 acor.test(x, y, method = "cma", alternative = "greater")
 ```
 
@@ -113,9 +118,8 @@ fit$pairwise_results
 ## Interpretation
 
 The asymmetric measures are directional: exchanging `X` and `Y` generally
-changes the result. This is most useful when the analyst wants to quantify the
+changes the result. This is most useful when one wants to quantify the
 association of one or more predictors with a designated outcome.
 
-The rescaled measures `cid` and `cma` may be easier to interpret in some
-applications because they lie on `[0, 1]`, whereas `akc` and `agc` lie on
+The rescaled measures `cid` and `cma` lie on `[0, 1]`, whereas `akc` and `agc` lie on
 `[-1, 1]`.

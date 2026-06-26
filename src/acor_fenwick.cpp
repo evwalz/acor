@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <numeric>
 #include <map>
+#include "joint_counts.h"
 using namespace Rcpp;
 
 // ============================================================================
@@ -68,15 +69,9 @@ std::vector<std::vector<int>> group_by_sorted(
 // ============================================================================
 // Shared Fenwick core: count_both_less, count_x_less_y_eq,
 //                      count_x_eq_y_less, count_both_eq
-// Used by both H_bar_vec_v2 and kernel_agc_v2
+// Used by H_bar_vec_v2_cpp and kernel_agc_v2_cpp.
+// Declarations live in src/joint_counts.h.
 // ============================================================================
-
-struct JointCounts {
-  std::vector<int> count_both_less;
-  std::vector<int> count_x_less_y_eq;
-  std::vector<int> count_x_eq_y_less;
-  std::vector<int> count_both_eq;
-};
 
 JointCounts compute_joint_counts(
     const std::vector<int>& Xc, int Mx,
@@ -373,19 +368,13 @@ NumericVector kernel_agc_v2_cpp(NumericVector x_rank, NumericVector y_rank,
   int Mx, My;
   std::vector<int> Xc = compress(xr, Mx);
   std::vector<int> Yc = compress(yr, My);
-  
-  // Joint counts via shared core
-  JointCounts jc = compute_joint_counts(Xc, Mx, Yc, My, N);
-  
-  // H_bar(x_i, y_i) for all i
-  std::vector<double> Hbar(N);
-  for (int i = 0; i < N; i++) {
-    Hbar[i] = (jc.count_both_less[i] +
-      0.5 * jc.count_x_eq_y_less[i] +
-      0.5 * jc.count_x_less_y_eq[i] +
-      0.25 * jc.count_both_eq[i]) / N;
-  }
-  
+
+  // (Previously: a call to compute_joint_counts() and derivation of an
+  //  Hbar(x_i, y_i) vector here. Both turned out to be unused -- the final
+  //  kernel formula at the bottom of this function depends only on the
+  //  marginal-conditional quantities T_m and S_i, not on the bivariate
+  //  empirical CDF.)
+
   // Frequency tables for Y
   std::vector<int> n_y(My, 0);
   for (int i = 0; i < N; i++) n_y[Yc[i] - 1]++;
